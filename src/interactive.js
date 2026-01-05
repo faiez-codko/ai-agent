@@ -1,25 +1,51 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { setup, read, update, fix, run } from './commands.js';
-import { Agent } from './agent.js';
+import { AgentManager } from './agentManager.js';
 import ora from 'ora';
 
 export async function startInteractiveMode() {
   console.clear();
-  console.log(chalk.bold.blue('🤖 AI Agent Interactive Mode'));
+  console.log(chalk.bold.blue('🤖 AI Agent Interactive Mode (Multi-Agent)'));
   console.log(chalk.gray('Type /help to see available commands.'));
   console.log(chalk.gray('Type /exit to quit.'));
   console.log('');
 
-  const agent = new Agent();
-  await agent.init();
+  const manager = new AgentManager();
+  
+  // Initialize default agents
+  await manager.createAgent('default', 'primary');
+  
+  // Optional: Pre-load common roles for convenience?
+  // User asked for default agents to be available
+  const defaultRoles = [
+      { id: 'project_manager', name: 'pm' },
+      { id: 'team_lead', name: 'lead' },
+      { id: 'senior_engineer', name: 'senior' },
+      { id: 'junior_engineer', name: 'junior' },
+      { id: 'testing_engineer', name: 'qa' },
+      { id: 'database_manager', name: 'db' },
+      { id: 'document_maker', name: 'docs' }
+  ];
+  
+  for (const role of defaultRoles) {
+      try {
+          await manager.createAgent(role.id, role.name);
+      } catch (e) {
+          // Ignore if persona file missing, but log warning
+          // console.warn(`Failed to auto-load ${role.name}: ${e.message}`);
+      }
+  }
 
   while (true) {
+    const activeAgent = manager.getActiveAgent();
+    const promptPrefix = chalk.cyan(`[${activeAgent.name}] >`);
+
     const { input } = await inquirer.prompt([
       {
         type: 'input',
         name: 'input',
-        message: chalk.cyan('ai-agent >'),
+        message: promptPrefix,
         prefix: '',
       },
     ]);
@@ -28,12 +54,12 @@ export async function startInteractiveMode() {
     if (!trimmedInput) continue;
 
     if (trimmedInput.startsWith('/')) {
-      await handleCommand(trimmedInput, agent);
+      await handleCommand(trimmedInput, manager);
     } else {
       // Chat mode
       const spinner = ora('Thinking...').start();
       try {
-        const response = await agent.chat(trimmedInput, async (message) => {
+        const response = await activeAgent.chat(trimmedInput, async (message) => {
              // Pause spinner to ask for confirmation
              spinner.stop();
              const { confirm } = await inquirer.prompt([{
@@ -56,10 +82,11 @@ export async function startInteractiveMode() {
   }
 }
 
-async function handleCommand(inputLine, agent) {
+async function handleCommand(inputLine, manager) {
   // Simple argument parser that respects quotes
   const args = inputLine.match(/(?:[^\s"]+|"[^"]*")+/g).map(arg => arg.replace(/^"|"$/g, ''));
   const command = args[0].toLowerCase();
+  const agent = manager.getActiveAgent();
 
   try {
     switch (command) {
@@ -73,9 +100,47 @@ async function handleCommand(inputLine, agent) {
         break;
       case '/setup':
         await setup();
-        // Re-init agent to pick up new config
+        // Re-init current agent to pick up new config
         await agent.init();
         break;
+      case '/agents':
+        const agents = manager.listAgents();
+        console.log(chalk.bold('\nActive Agents:'));
+        agents.forEach((a, index) => {
+            const active = a.id === manager.activeAgentId ? '*' : ' ';
+            const activeLabel = active === '*' ? chalk.green('(Active)') : '';
+            console.log(` ${index + 1}. ${a.name} ( ${chalk.cyan(a.id)} ) : ${chalk.gray(a.description)} ${activeLabel}`);
+        });
+        console.log('');
+        break;
+      case '/create':
+          if (args.length < 2) {
+              const personas = await manager.listAvailablePersonas();
+              console.log(chalk.yellow(`Usage: /create <persona> [name]`));
+              console.log(`Available personas: ${personas.join(', ')}`);
+          } else {
+              const persona = args[1];
+              const name = args[2] || null;
+              try {
+                  const newAgent = await manager.createAgent(persona, name);
+                  console.log(chalk.green(`Created agent ${newAgent.name}`));
+                  manager.setActiveAgent(newAgent.name);
+              } catch (e) {
+                  console.error(chalk.red(e.message));
+              }
+          }
+          break;
+      case '/switch':
+          if (args.length < 2) {
+              console.log(chalk.yellow('Usage: /switch <agent_name>'));
+          } else {
+              if (manager.setActiveAgent(args[1])) {
+                  console.log(chalk.green(`Switched to ${args[1]}`));
+              } else {
+                  console.error(chalk.red(`Agent ${args[1]} not found.`));
+              }
+          }
+          break;
       case '/read':
         if (args.length < 2) {
           console.log(chalk.red('Usage: /read <file> [query]'));
@@ -98,55 +163,57 @@ async function handleCommand(inputLine, agent) {
             console.log('');
           }
           break;
-      case '/update':
-        if (args.length < 2) {
-          console.log(chalk.red('Usage: /update <file> [instruction]'));
-        } else {
-          const file = args[1];
-          const instruction = args.slice(2).join(' ');
-          await update(file, instruction, agent);
-        }
-        break;
-      case '/fix':
-        if (args.length < 2) {
-          console.log(chalk.red('Usage: /fix <file>'));
-        } else {
-          await fix(args[1], agent);
-        }
-        break;
-      case '/run':
-        if (args.length < 2) {
-          console.log(chalk.red('Usage: /run <instruction>'));
-        } else {
-          const instruction = args.slice(1).join(' ');
-          await run(instruction, agent);
-        }
-        break;
       case '/clear':
         agent.memory = [];
-        await agent.init(); // Re-add system prompt
+        await agent.init();
         console.log(chalk.yellow('Memory cleared.'));
         break;
+      case '/update':
+          if (args.length < 2) {
+             console.log(chalk.red('Usage: /update <file> [instruction...]'));
+          } else {
+             const file = args[1];
+             const instruction = args.slice(2).join(' ');
+             await update(file, instruction, agent);
+          }
+          break;
+      case '/fix':
+          if (args.length < 2) {
+             console.log(chalk.red('Usage: /fix <file>'));
+          } else {
+             await fix(args[1], agent);
+          }
+          break;
+      case '/run':
+           if (args.length < 2) {
+              console.log(chalk.red('Usage: /run <instruction>'));
+           } else {
+              const instruction = args.slice(1).join(' ');
+              await run(instruction, agent);
+           }
+           break;
       default:
-        console.log(chalk.red(`Unknown command: ${command}`));
-        console.log(chalk.gray('Type /help for list of commands.'));
+        console.log(chalk.red('Unknown command: ' + command));
+        console.log('Type /help for list of commands.');
     }
   } catch (error) {
-    console.error(chalk.red(`Error executing command: ${error.message}`));
+    console.error(chalk.red('Error executing command:'), error);
   }
-  console.log(''); // Empty line for spacing
 }
 
 function showHelp() {
   console.log(chalk.bold('\nAvailable Commands:'));
-  console.log(chalk.cyan('/setup') + '                   - Configure AI provider');
-  console.log(chalk.cyan('/read <file> [query]') + '   - Analyze a file');
-  console.log(chalk.cyan('/research <dir>') + '        - Analyze a directory structure and content');
-  console.log(chalk.cyan('/update <file> <instr>') + ' - Update a file with instructions');
-  console.log(chalk.cyan('/fix <file>') + '            - Fix errors in a file');
-  console.log(chalk.cyan('/run <instruction>') + '     - Generate and run shell commands');
-  console.log(chalk.cyan('/clear') + '                 - Clear chat memory');
-  console.log(chalk.cyan('/help') + '                  - Show this help message');
-  console.log(chalk.cyan('/exit') + '                  - Exit the program');
-  console.log(chalk.gray('Type anything else to chat with the agent context-aware.'));
+  console.log('  /help                      Show this help message');
+  console.log('  /exit                      Exit the application');
+  console.log('  /setup                     Configure AI provider');
+  console.log('  /agents                    List active agents');
+  console.log('  /create <persona> [name]   Create a new agent');
+  console.log('  /switch <name>             Switch active agent');
+  console.log('  /read <file> [query]       Read and analyze a file');
+  console.log('  /update <file> [prompt]    Update a file based on instructions');
+  console.log('  /fix <file>                Attempt to fix errors in a file');
+  console.log('  /run <instruction>         Generate and run a shell command');
+  console.log('  /research <directory>      Analyze a directory structure');
+  console.log('  /clear                     Clear chat memory');
+  console.log('');
 }

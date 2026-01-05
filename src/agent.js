@@ -2,22 +2,48 @@ import { getAIProvider } from './ai/index.js';
 import { readFile, writeFile, listFiles } from './tools/fs.js';
 import { runCommand } from './tools/shell.js';
 import { tools as toolImplementations, toolDefinitions } from './tools/index.js';
+import { loadPersona } from './personas/index.js';
 import chalk from 'chalk';
 import path from 'path';
 
 export class Agent {
-  constructor() {
+  constructor(config = {}) {
     this.provider = null;
     this.memory = []; // Store chat history
-    this.toolsDefinition = toolDefinitions;
-    this.tools = toolImplementations;
+    
+    // Config properties
     this.cwd = process.cwd();
+    this.personaId = config.personaId || 'default';
+    this.persona = null; // Loaded in init()
+    this.name = config.name || 'AI';
+    
+    // Tools will be filtered in init()
+    this.toolsDefinition = []; 
+    this.tools = {};
   }
 
   async init() {
     this.provider = await getAIProvider();
-    const systemPrompt = `You are an autonomous AI software engineer. 
-You can analyze code, run commands, and modify files.
+    
+    // Load Persona
+    this.persona = await loadPersona(this.personaId);
+    this.name = this.persona.name;
+    
+    // Filter tools based on persona
+    const allowed = new Set(this.persona.allowedTools || []);
+    this.toolsDefinition = toolDefinitions.filter(t => allowed.has(t.name));
+    
+    // Map implementations
+    this.tools = {};
+    for (const name of allowed) {
+        if (toolImplementations[name]) {
+            this.tools[name] = toolImplementations[name];
+        }
+    }
+
+    const systemPrompt = `You are ${this.name}.
+${this.persona.systemPrompt}
+
 You have access to the following tools: ${this.toolsDefinition.map(t => t.name).join(', ')}.
 
 IMPORTANT:
