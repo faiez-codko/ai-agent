@@ -41,7 +41,7 @@ IMPORTANT:
     this.memory.push({ role: 'user', content: userMessage });
     
     let loopCount = 0;
-    const MAX_LOOPS = 10;
+    const MAX_LOOPS = 100;
     let finalResponse = null;
 
     while (loopCount < MAX_LOOPS) {
@@ -141,6 +141,8 @@ IMPORTANT:
         
         loopCount++;
     }
+
+    writeFile('./memory.json', JSON.stringify(this.memory, null, 2));
 
     return "Error: Maximum tool loop limit reached.";
   }
