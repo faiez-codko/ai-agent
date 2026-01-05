@@ -3,6 +3,7 @@ import { readFile, writeFile, listFiles } from './tools/fs.js';
 import { runCommand } from './tools/shell.js';
 import { tools as toolImplementations, toolDefinitions } from './tools/index.js';
 import { loadPersona } from './personas/index.js';
+import { loadChatHistory, saveChatHistory } from './chatStorage.js';
 import chalk from 'chalk';
 import path from 'path';
 
@@ -16,6 +17,7 @@ export class Agent {
     this.personaId = config.personaId || 'default';
     this.persona = null; // Loaded in init()
     this.name = config.name || 'AI';
+    this.id = config.name || this.personaId; // Use provided name as ID, fallback to personaId
     this.manager = config.manager || null;
     
     // Tools will be filtered in init()
@@ -62,6 +64,22 @@ IMPORTANT:
       role: 'system',
       content: systemPrompt
     });
+
+    // Load chat history
+    try {
+        const history = await loadChatHistory(this.id);
+        if (history && history.length > 0) {
+            // Update system prompt in history or prepend it
+            if (history[0].role === 'system') {
+                history[0].content = systemPrompt;
+            } else {
+                history.unshift({ role: 'system', content: systemPrompt });
+            }
+            this.memory = history;
+        }
+    } catch (e) {
+        console.error("Failed to load chat history:", e);
+    }
   }
 
   async chat(userMessage, confirmCallback = null) {
@@ -124,6 +142,7 @@ IMPORTANT:
 
         // If no tool calls, we are done
         if (!response.toolCalls || response.toolCalls.length === 0) {
+            await saveChatHistory(this.id, this.memory);
             return finalResponse || response.content;
         }
 
@@ -169,7 +188,8 @@ IMPORTANT:
         loopCount++;
     }
 
-    writeFile('./memory.json', JSON.stringify(this.memory, null, 2));
+    // writeFile('./memory.json', JSON.stringify(this.memory, null, 2));
+    await saveChatHistory(this.id, this.memory);
 
     return "Error: Maximum tool loop limit reached.";
   }
