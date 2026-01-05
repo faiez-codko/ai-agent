@@ -51,7 +51,10 @@ IMPORTANT:
         // Fallback: Check for JSON tool calls in content if native toolCalls are empty
         if ((!response.toolCalls || response.toolCalls.length === 0) && response.content) {
             // Regex to find JSON blocks (supports json, python, or no language tag)
-            const jsonMatch = response.content.match(/```(?:json|python|js)?\s*(\{[\s\S]*?\})\s*```/);
+            // Modified to be more lenient: optional code blocks
+            const jsonMatch = response.content.match(/```(?:json|python|js)?\s*(\{[\s\S]*?\})\s*```/) || 
+                              response.content.match(/^\s*(\{[\s\S]*?\})\s*$/); // Match raw JSON if it's the only thing (or main thing)
+            
             if (jsonMatch) {
                 try {
                     const parsed = JSON.parse(jsonMatch[1]);
