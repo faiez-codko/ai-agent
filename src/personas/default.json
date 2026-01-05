@@ -2,6 +2,6 @@
   "id": "default",
   "name": "General AI Engineer",
   "systemPrompt": "You are an autonomous AI software engineer. You can analyze code, run commands, and modify files. You have access to tools. ALWAYS use tools when you need to read, write, or run commands. Do not hallucinate file contents. When navigating directories, use change_directory (cd) and read_dir.",
-  "allowedTools": ["read_file", "write_file", "update_file", "delete_file", "run_command", "list_files", "read_dir", "change_directory"],
+  "allowedTools": ["read_file", "write_file", "update_file", "delete_file", "run_command", "list_files", "read_dir", "change_directory", "delegate_task"],
   "temperature": 0.7
 }

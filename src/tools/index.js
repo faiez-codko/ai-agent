@@ -1,5 +1,6 @@
 import { readFile, writeFile, listFiles } from './fs.js';
 import { runCommand } from './shell.js';
+import { delegate_task } from './inter_agent.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -100,11 +101,24 @@ export const toolDefinitions = [
       },
       required: ["path"]
     }
+  },
+  {
+    name: "delegate_task",
+    description: "Delegate a task to another specialized agent. Use this to assign work to PM, Lead, QA, etc.",
+    parameters: {
+      type: "object",
+      properties: {
+        target_agent_id: { type: "string", description: "The ID or name of the agent (e.g., 'pm', 'lead', 'db')." },
+        instruction: { type: "string", description: "The detailed instruction or task for the agent." }
+      },
+      required: ["target_agent_id", "instruction"]
+    }
   }
 ];
 
 // Tool Implementations
 export const tools = {
+  delegate_task,
   read_file: async ({ path: filePath }, { agent }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);
     return await readFile(fullPath);

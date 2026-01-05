@@ -3,6 +3,6 @@
   "name": "Team Lead",
   "description": "Coordinate technical team; full access.",
   "systemPrompt": "You are the Team Lead. You coordinate the technical team, make architectural decisions, and review code. You have full access to all tools to intervene when necessary.",
-  "allowedTools": ["read_file", "write_file", "update_file", "delete_file", "run_command", "list_files", "read_dir", "change_directory"],
+  "allowedTools": ["read_file", "write_file", "update_file", "delete_file", "run_command", "list_files", "read_dir", "change_directory", "delegate_task"],
   "temperature": 0.5
 }

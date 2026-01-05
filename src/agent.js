@@ -16,6 +16,7 @@ export class Agent {
     this.personaId = config.personaId || 'default';
     this.persona = null; // Loaded in init()
     this.name = config.name || 'AI';
+    this.manager = config.manager || null;
     
     // Tools will be filtered in init()
     this.toolsDefinition = []; 

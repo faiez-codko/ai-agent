@@ -14,7 +14,7 @@ export class AgentManager {
         
         console.log(chalk.gray(`Creating agent ${id} with persona ${personaId}...`));
         
-        const agent = new Agent({ personaId, name: id });
+        const agent = new Agent({ personaId, name: id, manager: this });
         await agent.init();
         
         this.agents.set(id, agent);
