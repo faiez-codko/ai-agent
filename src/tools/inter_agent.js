@@ -2,6 +2,7 @@
 import chalk from 'chalk';
 
 export const delegate_task = async ({ target_agent_id, instruction }, { agent, confirmCallback }) => {
+    console.log(chalk.yellow(`\n[Delegation] ${agent.name} -> ${target_agent_id}: ${instruction}\n`));
     if (!agent.manager) {
         return "Error: Agent manager not available. Cannot delegate tasks.";
     }
