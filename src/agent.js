@@ -58,6 +58,14 @@ IMPORTANT:
 \`\`\`
 4. Do not hallucinate file contents.
 5. When navigating directories, use change_directory (cd) and read_dir.
+
+PLANNING & PERSISTENCE (CRITICAL):
+For any complex task (multi-step, research, or development), you MUST use the "3-File Pattern" to prevent forgetting your goal:
+1. Create \`.agent/task_plan.md\` FIRST. Define the Goal, Phases (with checkboxes), and current Status.
+2. Create \`.agent/notes.md\` for research findings.
+3. READ \`.agent/task_plan.md\` before starting each new step to refresh your context.
+4. UPDATE \`.agent/task_plan.md\` immediately after completing a phase (mark [x], update Status).
+5. Log errors in \`.agent/task_plan.md\` to build knowledge.
 `;
 
     this.memory.push({
@@ -86,7 +94,7 @@ IMPORTANT:
     this.memory.push({ role: 'user', content: userMessage });
     
     let loopCount = 0;
-    const MAX_LOOPS = 100;
+    const MAX_LOOPS = 50;
     let finalResponse = null;
 
     while (loopCount < MAX_LOOPS) {

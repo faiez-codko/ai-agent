@@ -21,14 +21,18 @@ export async function saveConfig(config) {
 }
 
 export async function getApiKey(provider) {
-    // In a real app, we might check a secure store or the config file.
-    // For now, we rely on environment variables.
-    if (provider === 'openai') {
-        return process.env.OPENAI_API_KEY;
-    } else if (provider === 'gemini') {
-        return process.env.GEMINI_API_KEY;
-    } else if (provider === 'compatible') {
-        return process.env.COMPATIBLE_API_KEY;
-    }
+    // Priority: 1. Environment Variables, 2. Config File
+    
+    // 1. Check Env Vars
+    if (provider === 'openai' && process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
+    if (provider === 'gemini' && process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
+    if (provider === 'compatible' && process.env.COMPATIBLE_API_KEY) return process.env.COMPATIBLE_API_KEY;
+
+    // 2. Check Config File
+    const config = await loadConfig();
+    if (provider === 'openai') return config.openai_api_key;
+    if (provider === 'gemini') return config.gemini_api_key;
+    if (provider === 'compatible') return config.compatible_api_key;
+
     return null;
 }

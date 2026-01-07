@@ -1,9 +1,8 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import os from 'os';
 
-const CHAT_FILE = path.join(os.homedir(), '.ai-agent-chat.json');
+const CHAT_FILE = path.join(process.cwd(), '.agent', '.ai-agent-chat.json');
 const MAX_SIZE_BYTES = 30 * 1024 * 1024; // 30MB
 
 export async function loadChatHistory(agentId) {

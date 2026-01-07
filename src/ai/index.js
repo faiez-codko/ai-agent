@@ -18,7 +18,7 @@ export async function getAIProvider() {
   } else if (providerType === 'compatible') {
      // OpenAI compatible (e.g. LocalAI, Groq, etc.)
      // Requires BASE_URL env var or config
-     const baseURL = process.env.OPENAI_BASE_URL;
+     const baseURL = process.env.OPENAI_BASE_URL || config.compatible_base_url;
      return new OpenAIProvider(apiKey, baseURL, config.model || 'gpt-3.5-turbo');
   } else {
     throw new Error(`Unknown provider: ${providerType}`);

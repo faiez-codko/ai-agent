@@ -28,12 +28,38 @@ export async function setup() {
         return 'gpt-3.5-turbo';
       },
     },
+    {
+      type: 'password',
+      name: 'apiKey',
+      message: 'Enter API Key:',
+      mask: '*',
+    },
+    {
+      type: 'input',
+      name: 'baseUrl',
+      message: 'Enter Base URL:',
+      default: 'http://localhost:8080/v1',
+      when: (answers) => answers.provider === 'compatible',
+    }
   ]);
 
-  await saveConfig({
+  const newConfig = {
+    ...config,
     provider: answers.provider,
     model: answers.model,
-  });
+  };
+
+  // Save keys specifically for the provider
+  if (answers.provider === 'openai') {
+      newConfig.openai_api_key = answers.apiKey;
+  } else if (answers.provider === 'gemini') {
+      newConfig.gemini_api_key = answers.apiKey;
+  } else if (answers.provider === 'compatible') {
+      newConfig.compatible_api_key = answers.apiKey;
+      newConfig.compatible_base_url = answers.baseUrl;
+  }
+
+  await saveConfig(newConfig);
 
   console.log(chalk.green('Configuration saved!'));
   console.log(chalk.yellow('Make sure to set your API keys in environment variables (.env) or your shell.'));
