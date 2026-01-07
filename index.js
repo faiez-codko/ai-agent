@@ -4,6 +4,15 @@ import { Command } from 'commander';
 import { setup, read, update, fix, run } from './src/commands.js';
 import { startInteractiveMode } from './src/interactive.js';
 import chalk from 'chalk';
+import path from 'path';
+import fs from 'fs';
+
+const AGENT_DIR = path.join(process.cwd(), '.agent');
+if (!fs.existsSync(AGENT_DIR)) {
+  fs.mkdirSync(AGENT_DIR);
+}
+
+
 
 const program = new Command();
 
