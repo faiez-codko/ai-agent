@@ -12,7 +12,7 @@ export class AgentManager {
         // Unique ID for the agent instance
         const id = customId || `${personaId}-${Math.random().toString(36).substr(2, 4)}`;
         
-        console.log(chalk.gray(`Creating agent ${id} with persona ${personaId}...`));
+        console.log(chalk.gray(`Creating agent ${id} with persona ${customId || personaId}...`));
         
         const agent = new Agent({ personaId, name: id, manager: this });
         await agent.init();

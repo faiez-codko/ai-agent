@@ -168,7 +168,7 @@ For any complex task (multi-step, research, or development), you MUST use the "3
             const toolName = call.function.name;
             const args = JSON.parse(call.function.arguments);
             
-            console.log(chalk.gray(`\n> Calling tool: ${toolName} with args: ${JSON.stringify(args)}`));
+            console.log(chalk.gray(`\n> Calling tool: ${toolName} with args: ${JSON.stringify(args)}`));;
 
             let result;
             try {
