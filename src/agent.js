@@ -16,9 +16,14 @@ export class Agent {
     this.cwd = process.cwd();
     this.personaId = config.personaId || 'default';
     this.persona = null; // Loaded in init()
-    this.name = config.name || 'AI';
-    this.id = config.name || this.personaId; // Use provided name as ID, fallback to personaId
+    
+    // ID is stable identifier (e.g. for storage)
+    // Name is display name / persona name
+    this.id = config.id || config.name || `${this.personaId}-${Math.random().toString(36).substr(2, 4)}`;
+    this.name = config.name || null; // Will be set from persona if null
+    
     this.manager = config.manager || null;
+    this.safeMode = config.safeMode || false; // If true, requires confirmation for side-effects
     
     // Tools will be filtered in init()
     this.toolsDefinition = []; 
@@ -30,7 +35,11 @@ export class Agent {
     
     // Load Persona
     this.persona = await loadPersona(this.personaId);
-    this.name = this.persona.name;
+    
+    // Set name if not provided in config
+    if (!this.name) {
+        this.name = this.persona.name;
+    }
     
     // Filter tools based on persona
     const allowed = new Set(this.persona.allowedTools || []);
@@ -168,7 +177,8 @@ For any complex task (multi-step, research, or development), you MUST use the "3
             const toolName = call.function.name;
             const args = JSON.parse(call.function.arguments);
             
-            console.log(chalk.gray(`\n> Calling tool: ${toolName} with args: ${JSON.stringify(args)}`));;
+            console.log(chalk.cyan(`\n🛠️  Tool Call: ${chalk.bold(toolName)}`));
+            console.log(chalk.gray(`   Args: ${JSON.stringify(args)}`));
 
             let result;
             try {
@@ -182,7 +192,8 @@ For any complex task (multi-step, research, or development), you MUST use the "3
                 result = `Error executing tool: ${error.message}`;
             }
 
-            console.log(chalk.gray(`> Tool Result: ${result.slice(0, 100)}...`));
+            const resultPreview = result.length > 200 ? result.slice(0, 200) + '...' : result;
+            console.log(chalk.gray(`   Result: ${resultPreview}`));
 
             // Push tool result to memory
             this.memory.push({

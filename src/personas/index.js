@@ -23,9 +23,25 @@ export async function loadPersona(personaId) {
 export async function listPersonas() {
     try {
         const files = await fs.readdir(__dirname);
-        return files
-            .filter(f => f.endsWith('.json'))
-            .map(f => f.replace('.json', ''));
+        const personas = [];
+        
+        for (const file of files) {
+            if (file.endsWith('.json')) {
+                const id = file.replace('.json', '');
+                try {
+                    const content = await fs.readFile(path.join(__dirname, file), 'utf-8');
+                    const data = JSON.parse(content);
+                    personas.push({
+                        id,
+                        name: data.name,
+                        description: data.description || ''
+                    });
+                } catch (e) {
+                    personas.push({ id, name: id, description: 'Error loading metadata' });
+                }
+            }
+        }
+        return personas;
     } catch (error) {
         return [];
     }

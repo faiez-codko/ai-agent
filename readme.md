@@ -20,6 +20,8 @@ A powerful, multi-personality AI agent for your terminal. This tool allows you t
     *   Install dependencies.
 *   **Inter-Agent Delegation**: Agents can delegate tasks to each other (e.g., General Engineer delegating to PM for planning).
 *   **Persistent Memory**: Chat history is automatically saved to `~/.ai-agent-chat.json` (auto-clears after 30MB).
+*   **Persistent Sessions**: Agent instances and their states are saved to `~/.ai-agent-sessions.json`.
+*   **Safe Mode**: Toggleable protection against automatic file deletion or command execution.
 *   **Global Access**: Run `ai-agent` from anywhere.
 
 ## Installation
@@ -39,26 +41,28 @@ A powerful, multi-personality AI agent for your terminal. This tool allows you t
     Now you can just type `ai-agent` in any directory.
 
 3.  **Configuration**:
-    The agent needs an API key. You can set this in a `.env` file in the project root or export it in your shell.
+    The agent needs an API key. You can set this via the `setup` command or environment variables.
 
-    **Supported Providers:**
-    *   **OpenAI** (Default)
-    *   **Gemini**
-    *   **OpenAI Compatible** (LocalAI, Groq, etc.)
+    **Interactive Setup:**
+    ```bash
+    ai-agent setup
+    ```
+    This will prompt for your provider (OpenAI, Gemini, Compatible), API Key, and optional Base URL. Settings are saved to `~/.ai-agent-config.json`.
 
+    **Environment Variables (Optional):**
+    Env vars take priority over the config file.
+    Create a `.env` file in the project root:
     ```bash
     # For OpenAI
-    export OPENAI_API_KEY="sk-..."
+    OPENAI_API_KEY="sk-..."
 
     # For Gemini
-    export GEMINI_API_KEY="AIza..."
+    GEMINI_API_KEY="AIza..."
     
-    # For Compatible (e.g. LocalAI)
-    export OPENAI_BASE_URL="http://localhost:8080/v1"
-    export COMPATIBLE_API_KEY="sk-..."
+    # For Compatible (e.g. LocalAI, Groq, Ollama)
+    OPENAI_BASE_URL="http://localhost:8080/v1"
+    COMPATIBLE_API_KEY="sk-..."
     ```
-
-    *Run `ai-agent setup` to configure the preferred provider interactively.*
 
 ## Usage
 
@@ -69,23 +73,36 @@ ai-agent
 ```
 
 **Commands inside the shell:**
-*   `/agents` - List all active agents and their status.
-*   `/switch <agent_name>` - Switch context to a different agent (e.g., `/switch pm`).
-*   `/create <persona> [name]` - Create a new agent instance from a persona.
-*   `/clear` - Clear the current screen.
+*   `/agents` - List all active agents, their IDs, and personas.
+*   `/switch <id_or_name>` - Switch context to a different agent.
+*   `/create <persona> [name]` - Create a new agent instance (e.g., `/create pm MyPM`).
+*   `/safe-mode` - Toggle Safe Mode (forces confirmation for shell commands and file writes).
+*   `/history` - View the current agent's raw memory/context.
+*   `/research <dir>` - Analyze a directory structure.
+*   `/clear` - Clear the current agent's short-term memory.
 *   `/help` - Show available commands.
 *   `/exit` - Exit the program.
 
 **Example Workflow:**
 ```text
-(General) > Please create a plan for a new Todo App.
-(General) > [Delegates to PM...]
+(primary) > Please create a plan for a new Todo App.
+(primary) > [Delegates to PM...]
 ...
-(General) > /switch pm
-(Project Manager) > I have outlined the requirements. Shall I pass this to the Team Lead?
-(Project Manager) > /switch lead
-(Team Lead) > /delegate senior "Implement the core API based on PM's specs"
+(primary) > /switch pm
+(pm) > I have outlined the requirements. Shall I pass this to the Team Lead?
+(pm) > /switch lead
+(lead) > /delegate senior "Implement the core API based on PM's specs"
 ```
+
+### Security & Safe Mode
+⚠️ **Power User Tool**: This agent executes real shell commands.
+*   **Safe Mode**: Type `/safe-mode` to enable. When enabled, the agent will **never** execute `run_command`, `write_file`, or `delete_file` without your explicit confirmation.
+*   **Review**: Always check the proposed commands in the tool output before confirming (if prompted).
+
+### Storage
+*   **Chat History**: `.agent/.ai-agent-chat.json` (Per-project, rotates at 30MB).
+*   **Sessions**: `.agent/sessions.json` (Per-project active agents).
+*   **Config**: `~/.ai-agent-config.json` (Global API keys and preferences).
 
 ### Single Command Mode
 Run a quick task without entering the shell:
@@ -99,10 +116,6 @@ Change your AI provider or model settings:
 ```bash
 ai-agent setup
 ```
-
-## Storage
-*   **Config**: Stored in `~/.ai-agent-config.json`
-*   **Chat History**: Stored in `~/.ai-agent-chat.json`. The file is automatically managed and will rotate/clear if it exceeds 30MB to save disk space.
 
 ## Architecture
 The system uses a centralized `AgentManager` to handle multiple `Agent` instances. Each agent has a specific `Persona` (system prompt + allowed tools). Agents can communicate and delegate tasks using the `delegate_task` tool.

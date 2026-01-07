@@ -12,28 +12,29 @@ export async function startInteractiveMode() {
   console.log('');
 
   const manager = new AgentManager();
+  await manager.init();
   
-  // Initialize default agents
-  await manager.createAgent('default', 'primary');
-  
-  // Optional: Pre-load common roles for convenience?
-  // User asked for default agents to be available
-  const defaultRoles = [
-      { id: 'project_manager', name: 'pm' },
-      { id: 'team_lead', name: 'lead' },
-      { id: 'senior_engineer', name: 'senior' },
-      { id: 'junior_engineer', name: 'junior' },
-      { id: 'testing_engineer', name: 'qa' },
-      { id: 'database_manager', name: 'db' },
-      { id: 'document_maker', name: 'docs' }
-  ];
-  
-  for (const role of defaultRoles) {
-      try {
-          await manager.createAgent(role.id, role.name);
-      } catch (e) {
-          // Ignore if persona file missing, but log warning
-          // console.warn(`Failed to auto-load ${role.name}: ${e.message}`);
+  // Initialize default agents only if no agents loaded
+  if (manager.agents.size === 0) {
+      console.log(chalk.gray('Initializing default agents...'));
+      await manager.createAgent('default', 'primary');
+      
+      const defaultRoles = [
+          { id: 'project_manager', name: 'pm' },
+          { id: 'team_lead', name: 'lead' },
+          { id: 'senior_engineer', name: 'senior' },
+          { id: 'junior_engineer', name: 'junior' },
+          { id: 'testing_engineer', name: 'qa' },
+          { id: 'database_manager', name: 'db' },
+          { id: 'document_maker', name: 'docs' }
+      ];
+      
+      for (const role of defaultRoles) {
+          try {
+              await manager.createAgent(role.id, role.name);
+          } catch (e) {
+              // Ignore if persona file missing
+          }
       }
   }
 
@@ -192,6 +193,16 @@ async function handleCommand(inputLine, manager) {
               await run(instruction, agent);
            }
            break;
+      case '/history':
+        console.log(chalk.bold('\n--- Agent Memory Dump ---'));
+        console.log(JSON.stringify(agent.memory, null, 2));
+        console.log(chalk.bold('-------------------------\n'));
+        break;
+      case '/safe-mode':
+        agent.safeMode = !agent.safeMode;
+        await manager.saveState();
+        console.log(chalk.yellow(`\nSafe Mode is now ${agent.safeMode ? 'ENABLED' : 'DISABLED'}\n`));
+        break;
       default:
         console.log(chalk.red('Unknown command: ' + command));
         console.log('Type /help for list of commands.');
@@ -215,5 +226,7 @@ function showHelp() {
   console.log('  /run <instruction>         Generate and run a shell command');
   console.log('  /research <directory>      Analyze a directory structure');
   console.log('  /clear                     Clear chat memory');
+  console.log('  /history                   Show agent memory dump');
+  console.log('  /safe-mode                 Toggle Safe Mode (ask before dangerous actions)');
   console.log('');
 }

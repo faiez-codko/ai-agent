@@ -123,13 +123,27 @@ export const tools = {
     const fullPath = resolvePath(filePath, agent?.cwd);
     return await readFile(fullPath);
   },
-  write_file: async ({ path: filePath, content }, { agent }) => {
+  write_file: async ({ path: filePath, content }, { agent, confirmCallback }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);
+    
+    if (agent?.safeMode) {
+        if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
+        const approved = await confirmCallback(`[SAFE MODE] Write to ${fullPath}?`);
+        if (!approved) return "Write cancelled by user.";
+    }
+
     await writeFile(fullPath, content);
     return `Successfully wrote to ${fullPath}`;
   },
-  update_file: async ({ path: filePath, search_text, replace_text }, { agent }) => {
+  update_file: async ({ path: filePath, search_text, replace_text }, { agent, confirmCallback }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);
+    
+    if (agent?.safeMode) {
+        if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
+        const approved = await confirmCallback(`[SAFE MODE] Update ${fullPath}?`);
+        if (!approved) return "Update cancelled by user.";
+    }
+
     try {
         const content = await readFile(fullPath);
         if (content.includes(search_text)) {
@@ -152,7 +166,8 @@ export const tools = {
         return `File ${fullPath} does not exist.`;
     }
 
-    if (confirmCallback) {
+    if (agent?.safeMode || confirmCallback) {
+        if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
         const confirmed = await confirmCallback(`Are you sure you want to DELETE ${fullPath}?`);
         if (!confirmed) {
             return "Deletion cancelled by user.";
@@ -162,8 +177,15 @@ export const tools = {
     await fs.unlink(fullPath);
     return `Successfully deleted ${fullPath}`;
   },
-  run_command: async ({ command }, { agent }) => {
+  run_command: async ({ command }, { agent, confirmCallback }) => {
     const cwd = agent?.cwd || process.cwd();
+    
+    if (agent?.safeMode) {
+        if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
+        const approved = await confirmCallback(`[SAFE MODE] Execute command?\n${command}`);
+        if (!approved) return "Command execution cancelled by user.";
+    }
+
     // We execute the command in the agent's cwd
     // Note: runCommand in shell.js currently uses execa(command, { shell: true })
     // We need to check if runCommand supports options. 

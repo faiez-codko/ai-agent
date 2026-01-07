@@ -56,6 +56,7 @@ export async function saveChatHistory(agentId, messages) {
         }
     }
 
+    await fs.mkdir(path.dirname(CHAT_FILE), { recursive: true });
     await fs.writeFile(CHAT_FILE, content);
 }
 
