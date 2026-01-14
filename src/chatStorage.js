@@ -1,76 +1,102 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
 
-const CHAT_FILE = path.join(process.cwd(), '.agent', '.ai-agent-chat.json');
-const MAX_SIZE_BYTES = 30 * 1024 * 1024; // 30MB
+const DB_FILE = path.join(process.cwd(), '.agent', '.ai-agent-chat.sqlite');
+const MAX_SIZE_BYTES = 100 * 1024 * 1024;
+
+let dbPromise = null;
+
+async function initDb() {
+    await fs.mkdir(path.dirname(DB_FILE), { recursive: true });
+    const db = await open({
+        filename: DB_FILE,
+        driver: sqlite3.Database
+    });
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS chat_history (
+            agent_id TEXT PRIMARY KEY,
+            messages TEXT NOT NULL
+        )
+    `);
+    return db;
+}
+
+function getDb() {
+    if (!dbPromise) {
+        dbPromise = initDb();
+    }
+    return dbPromise;
+}
 
 export async function loadChatHistory(agentId) {
     try {
-        const data = await fs.readFile(CHAT_FILE, 'utf-8');
-        const history = JSON.parse(data);
-        return history[agentId] || [];
+        const db = await getDb();
+        const row = await db.get(
+            'SELECT messages FROM chat_history WHERE agent_id = ?',
+            agentId
+        );
+        if (!row || !row.messages) {
+            return [];
+        }
+        return JSON.parse(row.messages);
     } catch (error) {
         return [];
     }
 }
 
 export async function saveChatHistory(agentId, messages) {
-    let history = {};
-    try {
-        const data = await fs.readFile(CHAT_FILE, 'utf-8');
-        history = JSON.parse(data);
-    } catch (error) {
-        // File doesn't exist or is invalid, start fresh
-    }
+    const db = await getDb();
 
-    history[agentId] = messages;
-
-    // Convert to string to check size
-    let content = JSON.stringify(history, null, 2);
+    let storedMessages = Array.isArray(messages) ? messages : [];
+    let content = JSON.stringify(storedMessages, null, 2);
     let size = Buffer.byteLength(content, 'utf8');
 
     if (size > MAX_SIZE_BYTES) {
-        // Strategy: Clear ONLY the current agent's history first if it's too big, 
-        // or clear everything if we really need space. 
-        // The user requirement says "then clear chat", implying a hard reset or rotation.
-        // Let's try to just keep the last few messages for the current agent, or wipe if still too big.
-        
-        console.warn(`Chat history size (${(size / 1024 / 1024).toFixed(2)}MB) exceeds limit (30MB). Clearing history for ${agentId}...`);
-        
-        // Keep only the system prompt (first message usually) and maybe last 5
-        const systemPrompt = messages.find(m => m.role === 'system');
-        const recent = messages.slice(-5);
-        history[agentId] = systemPrompt ? [systemPrompt, ...recent] : recent;
-        
-        content = JSON.stringify(history, null, 2);
+        console.warn(
+            `Chat history size (${(size / 1024 / 1024).toFixed(
+                2
+            )}MB) exceeds limit (30MB). Clearing history for ${agentId}...`
+        );
+
+        const systemPrompt = storedMessages.find(m => m.role === 'system');
+        const recent = storedMessages.slice(-5);
+        storedMessages = systemPrompt ? [systemPrompt, ...recent] : recent;
+
+        content = JSON.stringify(storedMessages, null, 2);
         size = Buffer.byteLength(content, 'utf8');
-        
-        // If still too big (e.g. other agents are hoarding data), wipe everything
+
         if (size > MAX_SIZE_BYTES) {
-             console.warn("Total chat storage still exceeds limit. Clearing ALL chat history.");
-             history = {};
-             // Restore just the current agent's minimal context
-             history[agentId] = systemPrompt ? [systemPrompt] : [];
-             content = JSON.stringify(history, null, 2);
+            console.warn(
+                'Chat history for this agent still exceeds limit. Keeping minimal context.'
+            );
+            const minimal = systemPrompt ? [systemPrompt] : [];
+            storedMessages = minimal;
+            content = JSON.stringify(storedMessages, null, 2);
         }
     }
 
-    await fs.mkdir(path.dirname(CHAT_FILE), { recursive: true });
-    await fs.writeFile(CHAT_FILE, content);
+    await db.run(
+        `
+        INSERT INTO chat_history (agent_id, messages)
+        VALUES (?, ?)
+        ON CONFLICT(agent_id) DO UPDATE SET messages = excluded.messages
+    `,
+        agentId,
+        content
+    );
 }
 
 export async function clearChatHistory(agentId = null) {
     if (agentId) {
-        let history = {};
         try {
-            const data = await fs.readFile(CHAT_FILE, 'utf-8');
-            history = JSON.parse(data);
+            const db = await getDb();
+            await db.run('DELETE FROM chat_history WHERE agent_id = ?', agentId);
         } catch (e) {}
-        
-        delete history[agentId];
-        await fs.writeFile(CHAT_FILE, JSON.stringify(history, null, 2));
     } else {
-        await fs.unlink(CHAT_FILE).catch(() => {});
+        await fs.unlink(DB_FILE).catch(() => {});
+        dbPromise = null;
     }
 }
