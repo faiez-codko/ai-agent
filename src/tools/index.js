@@ -2,6 +2,7 @@ import { readFile, writeFile, listFiles } from './fs.js';
 import { runCommand } from './shell.js';
 import { delegate_task } from './inter_agent.js';
 import { browser_tools } from './browser.js';
+import { db_tools } from './db.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -161,12 +162,58 @@ export const toolDefinitions = [
       },
       required: ["url"]
     }
+  },
+  {
+    name: "db_connect",
+    description: "Connect to a database (sqlite, mysql, postgres).",
+    parameters: {
+      type: "object",
+      properties: {
+        type: { type: "string", description: "Database type: 'sqlite', 'mysql', 'postgres'" },
+        host: { type: "string", description: "Host (for mysql/postgres)" },
+        port: { type: "number", description: "Port (optional)" },
+        user: { type: "string", description: "Username" },
+        password: { type: "string", description: "Password" },
+        database: { type: "string", description: "Database name" },
+        filename: { type: "string", description: "Filename (for sqlite)" }
+      },
+      required: ["type"]
+    }
+  },
+  {
+    name: "db_query",
+    description: "Execute a SQL query.",
+    parameters: {
+      type: "object",
+      properties: {
+        sql: { type: "string", description: "SQL query string" },
+        params: { type: "array", description: "Parameters for the query (optional)" }
+      },
+      required: ["sql"]
+    }
+  },
+  {
+    name: "db_list_tables",
+    description: "List all tables in the connected database.",
+    parameters: { type: "object", properties: {} }
+  },
+  {
+    name: "db_schema",
+    description: "Get schema/structure of a specific table.",
+    parameters: {
+      type: "object",
+      properties: {
+        table: { type: "string", description: "Table name" }
+      },
+      required: ["table"]
+    }
   }
 ];
 
 // Tool Implementations
 export const tools = {
   ...browser_tools,
+  ...db_tools,
   delegate_task,
   read_file: async ({ path: filePath }, { agent }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);
