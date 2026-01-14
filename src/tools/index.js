@@ -1,6 +1,7 @@
 import { readFile, writeFile, listFiles } from './fs.js';
 import { runCommand } from './shell.js';
 import { delegate_task } from './inter_agent.js';
+import { browser_tools } from './browser.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -113,11 +114,45 @@ export const toolDefinitions = [
       },
       required: ["target_agent_id", "instruction"]
     }
+  },
+  {
+    name: "browser_visit",
+    description: "Visit a URL and get its text content. Use this to read documentation or web pages.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "The URL to visit." }
+      },
+      required: ["url"]
+    }
+  },
+  {
+    name: "browser_search",
+    description: "Search Google for a query and return top results with snippets.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The search query." }
+      },
+      required: ["query"]
+    }
+  },
+  {
+    name: "browser_eval",
+    description: "Execute JavaScript code on the current web page. Use this after browser_visit to extract specific data or interact with the page.",
+    parameters: {
+      type: "object",
+      properties: {
+        script: { type: "string", description: "The JavaScript code to execute. The last expression is returned." }
+      },
+      required: ["script"]
+    }
   }
 ];
 
 // Tool Implementations
 export const tools = {
+  ...browser_tools,
   delegate_task,
   read_file: async ({ path: filePath }, { agent }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);
