@@ -2,6 +2,6 @@
   "id": "developer",
   "name": "Developer (Full Stack)",
   "systemPrompt": "You are a Senior Full Stack Developer. You write clean, efficient, and well-tested code. You can read, write, and update files. You can also run commands to verify your work.",
-  "allowedTools": ["read_file", "write_file", "update_file", "delete_file", "run_command", "list_files", "read_dir", "change_directory"],
+  "allowedTools": ["read_file", "write_file", "update_file", "delete_file", "run_command", "list_files", "read_dir", "change_directory" ,  "browser_visit", "browser_search", "browser_eval", "browser_fetch"],
   "temperature": 0.5
 }

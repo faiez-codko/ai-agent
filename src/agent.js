@@ -4,6 +4,7 @@ import { runCommand } from './tools/shell.js';
 import { tools as toolImplementations, toolDefinitions } from './tools/index.js';
 import { loadPersona } from './personas/index.js';
 import { loadChatHistory, saveChatHistory } from './chatStorage.js';
+import { sendMessage as sendTelegramMessage } from './tools/telegram.js';
 import chalk from 'chalk';
 import path from 'path';
 
@@ -28,6 +29,7 @@ export class Agent {
     // Tools will be filtered in init()
     this.toolsDefinition = []; 
     this.tools = {};
+    this._hasSummary = false;
   }
 
   async init() {
@@ -96,19 +98,23 @@ For any complex task (multi-step, research, or development), you MUST use the "3
         }
     } catch (e) {
         console.error("Failed to load chat history:", e);
+        try {
+            await sendTelegramMessage(`Agent ${this.id} failed to load chat history: ${e.message || e}`);
+        } catch {}
     }
   }
 
   async chat(userMessage, confirmCallback = null) {
     this.memory.push({ role: 'user', content: userMessage });
+    await this._maybeSummarizeHistory();
     
     let loopCount = 0;
     const MAX_LOOPS = 50;
     let finalResponse = null;
 
     while (loopCount < MAX_LOOPS) {
-        // Call provider
-        const response = await this.provider.chat(this.memory, this.toolsDefinition);
+        const messagesForModel = this._buildContext();
+        const response = await this._safeChat(messagesForModel, this.toolsDefinition);
         
         // Fallback: Check for JSON tool calls in content if native toolCalls are empty
         if ((!response.toolCalls || response.toolCalls.length === 0) && response.content) {
@@ -190,9 +196,17 @@ For any complex task (multi-step, research, or development), you MUST use the "3
                 }
             } catch (error) {
                 result = `Error executing tool: ${error.message}`;
+                try {
+                    await sendTelegramMessage(`Agent ${this.id} tool error in ${toolName}: ${error.message || error}`);
+                } catch {}
             }
 
-            const resultPreview = result.length > 200 ? result.slice(0, 200) + '...' : result;
+            let textResult = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+            const maxToolChars = 4000;
+            if (textResult.length > maxToolChars) {
+                textResult = textResult.slice(0, maxToolChars) + `... [truncated ${textResult.length - maxToolChars} characters]`;
+            }
+            const resultPreview = textResult.length > 200 ? textResult.slice(0, 200) + '...' : textResult;
             console.log(chalk.gray(`   Result: ${resultPreview}`));
 
             // Push tool result to memory
@@ -200,7 +214,7 @@ For any complex task (multi-step, research, or development), you MUST use the "3
                 role: 'tool',
                 tool_call_id: call.id,
                 name: toolName,
-                content: result
+                content: textResult
             });
         }
         
@@ -211,6 +225,82 @@ For any complex task (multi-step, research, or development), you MUST use the "3
     await saveChatHistory(this.id, this.memory);
 
     return "Error: Maximum tool loop limit reached.";
+  }
+
+  _buildContext(maxMessages = 40) {
+    const systemMessages = this.memory.filter(m => m.role === 'system');
+    const nonSystem = this.memory.filter(m => m.role !== 'system');
+    const recent = nonSystem.slice(-maxMessages);
+    return [...systemMessages, ...recent];
+  }
+
+  async _safeChat(messages, toolsDefinition) {
+    try {
+        return await this.provider.chat(messages, toolsDefinition);
+    } catch (e) {
+        const message = e && e.message ? String(e.message) : String(e);
+        if (message.includes('Input tokens exceed the configured limit')) {
+            const smaller = this._buildContext(20);
+            return await this.provider.chat(smaller, toolsDefinition);
+        }
+        try {
+            await sendTelegramMessage(`Agent ${this.id} provider.chat error: ${message}`);
+        } catch {}
+        throw e;
+    }
+  }
+
+  async _maybeSummarizeHistory() {
+    const maxMessagesBeforeSummary = 200;
+    if (this._hasSummary) return;
+    if (this.memory.length <= maxMessagesBeforeSummary) return;
+    try {
+        await this._summarizeHistory();
+    } catch (e) {
+        console.error('Failed to summarize history:', e);
+        try {
+            await sendTelegramMessage(`Agent ${this.id} failed to summarize history: ${e.message || e}`);
+        } catch {}
+    }
+  }
+
+  async _summarizeHistory() {
+    const systemMessages = this.memory.filter(m => m.role === 'system');
+    const nonSystem = this.memory.filter(m => m.role !== 'system');
+    const keepRecentCount = 30;
+    const oldPart = nonSystem.slice(0, Math.max(0, nonSystem.length - keepRecentCount));
+    if (oldPart.length === 0) return;
+
+    let serialized = JSON.stringify(oldPart);
+    const maxSummaryChars = 20000;
+    if (serialized.length > maxSummaryChars) {
+        serialized = serialized.slice(0, maxSummaryChars) + '... [truncated]';
+    }
+
+    const summaryMessages = [];
+    if (systemMessages.length > 0) {
+        summaryMessages.push(systemMessages[0]);
+    }
+    summaryMessages.push({
+        role: 'user',
+        content: 'Summarize the following conversation so far in 1-2 paragraphs focusing on the main tasks, decisions, and important files. Do not include any tool call JSON or code blocks. Conversation:\n' + serialized
+    });
+
+    const summaryResponse = await this.provider.chat(summaryMessages, []);
+    const summaryText = summaryResponse && summaryResponse.content ? summaryResponse.content : '';
+
+    const recentPart = nonSystem.slice(-keepRecentCount);
+    const newMemory = [];
+    if (systemMessages.length > 0) {
+        newMemory.push(systemMessages[0]);
+    }
+    newMemory.push({
+        role: 'assistant',
+        content: 'Summary of previous conversation:\n' + summaryText
+    });
+    newMemory.push(...recentPart);
+    this.memory = newMemory;
+    this._hasSummary = true;
   }
 
   async researchDirectory(dirPath) {

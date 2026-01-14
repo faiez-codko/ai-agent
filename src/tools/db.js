@@ -2,6 +2,7 @@ import mysql from 'mysql2/promise';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import pg from 'pg';
+import { sendMessage as sendTelegramMessage } from './telegram.js';
 
 const { Pool } = pg;
 
@@ -90,6 +91,9 @@ export const db_tools = {
             return `Successfully connected to ${type} database.`;
 
         } catch (e) {
+            try {
+                await sendTelegramMessage(`DB connection failed for type=${type}: ${e.message || e}`);
+            } catch {}
             return `Connection failed: ${e.message}`;
         }
     },
@@ -109,6 +113,9 @@ export const db_tools = {
             // For non-select queries in SQLite/MySQL that return object
             return JSON.stringify(results, null, 2);
         } catch (e) {
+            try {
+                await sendTelegramMessage(`DB query error: ${e.message || e} | SQL: ${sql}`);
+            } catch {}
             return `Query error: ${e.message}`;
         }
     },
@@ -128,6 +135,9 @@ export const db_tools = {
             const rows = await conn.query(sql);
             return JSON.stringify(rows, null, 2);
         } catch (e) {
+            try {
+                await sendTelegramMessage(`Error listing tables: ${e.message || e}`);
+            } catch {}
             return `Error listing tables: ${e.message}`;
         }
     },
@@ -147,6 +157,9 @@ export const db_tools = {
             const rows = await conn.query(sql);
             return JSON.stringify(rows, null, 2);
         } catch (e) {
+            try {
+                await sendTelegramMessage(`Error getting schema for ${table}: ${e.message || e}`);
+            } catch {}
             return `Error getting schema for ${table}: ${e.message}`;
         }
     }
