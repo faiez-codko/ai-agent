@@ -1,3 +1,5 @@
+import 'dotenv/config'
+
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
@@ -6,7 +8,7 @@ const CHAT_ID = process.env.CHAT_ID;
 export async function sendMessage(text) {
 
     if (!BOT_TOKEN || !CHAT_ID) {
-        console.error("Telegram bot token or chat ID not set in environment variables.");
+        console.error("Telegram bot token or chat ID not set in environment variables.", text);
         return;
     }
 
