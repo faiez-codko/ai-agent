@@ -47,7 +47,7 @@ export const browser_tools = {
                 return clone.innerText;
             });
 
-            return `URL: ${url}\nTitle: ${title}\n\nContent Preview:\n${content.slice(0, 3000)}${content.length > 3000 ? '\n... (truncated)' : ''}`;
+            return `URL: ${url}\nTitle: ${title}\n\nContent Preview:\n${content.slice(0, 6000)}${content.length > 6000 ? '\n... (truncated)' : ''}`;
         } catch (e) {
             return `Error visiting ${url}: ${e.message}`;
         }
@@ -116,6 +116,31 @@ export const browser_tools = {
             return `Result: ${typeof result === 'object' ? JSON.stringify(result, null, 2) : result}`;
         } catch (e) {
             return `Error evaluating JS: ${e.message}`;
+        }
+    },
+
+    browser_fetch: async ({ url, method = 'GET', headers = {}, body = null }) => {
+        try {
+            console.log(`Fetching ${url} with method ${method}...`);
+            
+            const options = {
+                method,
+                headers,
+                body: body ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined
+            };
+
+            const response = await fetch(url, options);
+            const text = await response.text();
+
+            return JSON.stringify({
+                status: response.status,
+                statusText: response.statusText,
+                headers: Object.fromEntries(response.headers.entries()),
+                body: text
+            }, null, 2);
+            
+        } catch (e) {
+            return `Error executing fetch: ${e.message}`;
         }
     }
 };

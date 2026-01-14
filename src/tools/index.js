@@ -147,6 +147,20 @@ export const toolDefinitions = [
       },
       required: ["script"]
     }
+  },
+  {
+    name: "browser_fetch",
+    description: "Perform an HTTP request (fetch) using Node.js fetch. Supports GET, POST, PUT, DELETE, etc.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "The URL to fetch." },
+        method: { type: "string", description: "HTTP Method (GET, POST, etc.). Default: GET" },
+        headers: { type: "object", description: "HTTP Headers key-value pairs." },
+        body: { type: "string", description: "Request body (string or JSON). For POST/PUT." }
+      },
+      required: ["url"]
+    }
   }
 ];
 

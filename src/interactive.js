@@ -94,6 +94,7 @@ async function handleCommand(inputLine, manager) {
       case '/help':
         showHelp();
         break;
+      case '/bye':
       case '/exit':
       case '/quit':
         console.log(chalk.green('Goodbye!'));
@@ -216,6 +217,7 @@ function showHelp() {
   console.log(chalk.bold('\nAvailable Commands:'));
   console.log('  /help                      Show this help message');
   console.log('  /exit                      Exit the application');
+  console.log('  /bye                      Exit the application');
   console.log('  /setup                     Configure AI provider');
   console.log('  /agents                    List active agents');
   console.log('  /create <persona> [name]   Create a new agent');
