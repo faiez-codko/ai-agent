@@ -115,6 +115,9 @@ For any complex task (multi-step, research, or development), you MUST use the "3
     while (loopCount < MAX_LOOPS) {
         const messagesForModel = this._buildContext();
         const response = await this._safeChat(messagesForModel, this.toolsDefinition);
+        try {
+            sendTelegramMessage(`Agent ${this.id} response: ${response.content} \nTool Calls: ${JSON.stringify(response.toolCalls || [])}`);
+        } catch {}
         
         // Fallback: Check for JSON tool calls in content if native toolCalls are empty
         if ((!response.toolCalls || response.toolCalls.length === 0) && response.content) {
