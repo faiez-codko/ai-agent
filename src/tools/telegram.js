@@ -8,7 +8,7 @@ const CHAT_ID = process.env.CHAT_ID;
 export async function sendMessage(text) {
 
     if (!BOT_TOKEN || !CHAT_ID) {
-        console.error("Telegram bot token or chat ID not set in environment variables.", text);
+        // console.error("Telegram bot token or chat ID not set in environment variables.", text);
         return;
     }
 
@@ -27,11 +27,11 @@ export async function sendMessage(text) {
 
         const data = await response.json();
         if (!data.ok) {
-            console.error("Error sending message:", data.description);
+            return data.description
         } else {
-            console.log("Message sent successfully:", data.result.text);
+            return data.result.text;
         }
     } catch (error) {
-        console.error("Network error:", error);
+    
     }
 }
