@@ -24,7 +24,8 @@ export class AgentManager {
                 id: a.id,
                 name: a.name,
                 personaId: a.personaId,
-                safeMode: a.safeMode
+                safeMode: a.safeMode,
+                model: a.provider ? a.provider.model : null
             }))
         };
         try {
@@ -47,6 +48,7 @@ export class AgentManager {
                     name: agentData.name,
                     personaId: agentData.personaId,
                     safeMode: agentData.safeMode,
+                    model: agentData.model,
                     manager: this
                 });
                 await agent.init();

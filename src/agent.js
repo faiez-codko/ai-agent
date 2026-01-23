@@ -17,6 +17,7 @@ export class Agent {
     this.cwd = process.cwd();
     this.personaId = config.personaId || 'default';
     this.persona = null; // Loaded in init()
+    this.initialModel = config.model || null;
     
     // ID is stable identifier (e.g. for storage)
     // Name is display name / persona name
@@ -33,7 +34,7 @@ export class Agent {
   }
 
   async init() {
-    this.provider = await getAIProvider();
+    this.provider = await getAIProvider(this.initialModel);
     
     // Load Persona
     this.persona = await loadPersona(this.personaId);
@@ -352,6 +353,16 @@ ${content}
 User Question: ${question || 'Summarize this file and explain what it does.'}
 `;
     return await this.provider.generate(prompt);
+  }
+
+  async updateModel(modelId) {
+      if (this.provider && this.provider.model !== modelId) {
+          console.log(chalk.blue(`Switching agent ${this.id} model to ${modelId}`));
+          this.provider.model = modelId;
+          // Note: If switching between providers (OpenAI <-> Gemini) is needed, 
+          // we would need to recreate the provider here. 
+          // For now, assuming model string update is sufficient for same-provider or compatible.
+      }
   }
 
   async updateFile(filePath, instruction) {

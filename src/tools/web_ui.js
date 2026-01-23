@@ -57,12 +57,32 @@ export const webUiTools = {
             const sessions = Array.from(mgr.agents.values()).map(a => ({
                 id: a.id,
                 name: a.name || a.id,
-                persona: a.personaId
+                persona: a.personaId,
+                model: a.provider ? a.provider.model : null
             }));
             res.json(sessions);
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
+    });
+
+    // Get available models
+    app.get('/api/models', (req, res) => {
+        const models = [
+            { id: 'openai', name: 'GPT-5 Mini' },
+            { id: 'openai-fast', name: 'GPT-5 Nano' },
+            { id: 'openai-large', name: 'GPT-5.2' },
+            { id: 'grok', name: 'xAI Grok 4 Fast' },
+            { id: 'qwen-coder', name: 'Qwen3 Coder 30B' },
+            { id: 'mistral', name: 'Mistral Small 3.2 24B' },
+            { id: 'deepseek', name: 'DeepSeek V3.2' },
+            { id: 'glm', name: 'Z.ai GLM-4.7' },
+            { id: 'claude-fast', name: 'Claude Haiku 4.5' },
+            { id: 'claude', name: 'Claude Sonnet 4.5' },
+            { id: 'claude-large', name: 'Claude Opus 4.5' },
+            { id: 'nomnom', name: 'NomNom by @Itachi-1824' },
+        ];
+        res.json(models);
     });
 
     // Create new session
@@ -100,7 +120,7 @@ export const webUiTools = {
     // Stream message
     app.post('/api/chat/stream', async (req, res) => {
         try {
-            const { sessionId, message } = req.body;
+            const { sessionId, message, model } = req.body;
 
             if (!sessionId || !message) {
                 return res.status(400).send('Missing sessionId or message');
@@ -110,6 +130,11 @@ export const webUiTools = {
             const agent = mgr.getAgent(sessionId);
             if (!agent) {
                 return res.status(404).send('Session not found');
+            }
+
+            // Update model if requested
+            if (model) {
+                await agent.updateModel(model);
             }
 
             // Setup SSE

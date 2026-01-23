@@ -5,6 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat Interface</title>
     <style>
+        :root {
+            --bg-color: #fff;
+            --text-color: #333;
+            --sidebar-bg: #f9f9f9;
+            --border-color: #eee;
+            --hover-color: #f0f0f0;
+            --active-item-bg: #e5e5e5;
+            --user-msg-bg: #f0f0f0;
+            --assistant-msg-bg: transparent;
+            --input-bg: #f4f4f4;
+            --code-bg: #f4f4f4;
+            --secondary-text: #888;
+            --button-bg: #000;
+            --button-text: #fff;
+            --send-btn-active: #000;
+            --send-btn-inactive: #e0e0e0;
+        }
+
+        body.dark-mode {
+            --bg-color: #1e1e1e;
+            --text-color: #eee;
+            --sidebar-bg: #252526;
+            --border-color: #333;
+            --hover-color: #37373d;
+            --active-item-bg: #37373d;
+            --user-msg-bg: #37373d;
+            --assistant-msg-bg: transparent;
+            --input-bg: #383838;
+            --code-bg: #2d2d2d;
+            --secondary-text: #aaa;
+            --button-bg: #eee;
+            --button-text: #000;
+            --send-btn-active: #eee;
+            --send-btn-inactive: #444;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -15,18 +51,20 @@
         body {
             display: flex;
             height: 100vh;
-            background-color: #fff;
-            color: #333;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
         }
 
         /* Sidebar */
         .sidebar {
             width: 260px;
-            background-color: #f9f9f9;
+            background-color: var(--sidebar-bg);
             display: flex;
             flex-direction: column;
             padding: 10px;
-            border-right: 1px solid #eee;
+            border-right: 1px solid var(--border-color);
+            transition: background-color 0.3s;
         }
 
         .new-chat-btn {
@@ -35,18 +73,18 @@
             gap: 10px;
             padding: 10px;
             background: none;
-            border: 1px solid #e5e5e5;
+            border: 1px solid var(--border-color);
             border-radius: 8px;
             cursor: pointer;
             width: 100%;
             text-align: left;
             font-size: 14px;
-            color: #333;
+            color: var(--text-color);
             margin-bottom: 20px;
         }
         
         .new-chat-btn:hover {
-            background-color: #f0f0f0;
+            background-color: var(--hover-color);
         }
 
         .history-section {
@@ -56,7 +94,7 @@
 
         .history-date {
             font-size: 12px;
-            color: #888;
+            color: var(--secondary-text);
             margin: 10px 0 5px 10px;
         }
 
@@ -65,29 +103,29 @@
             border-radius: 6px;
             cursor: pointer;
             font-size: 14px;
-            color: #333;
+            color: var(--text-color);
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
         .history-item:hover, .history-item.active {
-            background-color: #e5e5e5;
+            background-color: var(--active-item-bg);
         }
 
-        .settings-btn {
+        .settings-btn, .theme-btn {
             display: flex;
             align-items: center;
             gap: 10px;
             padding: 10px;
             cursor: pointer;
             font-size: 14px;
-            color: #333;
+            color: var(--text-color);
             border-radius: 6px;
         }
 
-        .settings-btn:hover {
-            background-color: #e5e5e5;
+        .settings-btn:hover, .theme-btn:hover {
+            background-color: var(--hover-color);
         }
 
         /* Main Content */
@@ -117,37 +155,10 @@
             gap: 20px;
         }
 
-        .logo {
-            width: 48px;
-            height: 48px;
-            /* Placeholder for Llama icon */
-            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>'); 
-            background-repeat: no-repeat;
-            background-position: center;
-            opacity: 0.8;
-        }
-        
-        .llama-icon svg {
-            width: 40px;
-            height: 40px;
-        }
-
-        .auth-message {
-            font-size: 14px;
-            color: #666;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .sign-in-btn {
-            padding: 6px 12px;
-            background-color: #000;
-            color: #fff;
-            border: none;
-            border-radius: 20px;
-            font-size: 12px;
-            cursor: pointer;
+        .center-content h1 {
+            font-size: 24px;
+            font-weight: 500;
+            color: var(--text-color);
         }
 
         /* Message Bubbles */
@@ -177,22 +188,23 @@
         }
 
         .message.user .message-content {
-            background-color: #f0f0f0;
-            color: #333;
+            background-color: var(--user-msg-bg);
+            color: var(--text-color);
         }
 
         .message.assistant .message-content {
-            background-color: transparent;
-            color: #333;
+            background-color: var(--assistant-msg-bg);
+            color: var(--text-color);
             padding-left: 0;
         }
         
         .message-content pre {
-            background: #f4f4f4;
+            background: var(--code-bg);
             padding: 10px;
             border-radius: 5px;
             overflow-x: auto;
             margin-top: 10px;
+            color: var(--text-color);
         }
 
         /* Input Area */
@@ -203,13 +215,13 @@
             width: 100%;
             position: absolute;
             bottom: 0;
-            background: white; /* Cover content behind */
+            background: var(--bg-color); /* Cover content behind */
         }
 
         .input-container {
             width: 100%;
             max-width: 700px;
-            background-color: #f4f4f4;
+            background-color: var(--input-bg);
             border-radius: 26px;
             padding: 10px 15px;
             display: flex;
@@ -222,9 +234,9 @@
             width: 24px;
             height: 24px;
             border-radius: 50%;
-            border: 1px solid #ccc;
+            border: 1px solid var(--secondary-text);
             background: none;
-            color: #666;
+            color: var(--secondary-text);
             font-size: 16px;
             cursor: pointer;
             display: flex;
@@ -239,27 +251,67 @@
             border: none;
             outline: none;
             font-size: 16px;
-            color: #333;
+            color: var(--text-color);
         }
 
         .model-selector {
-            background: #fff;
+            background: var(--bg-color);
             border: none;
             padding: 4px 8px;
             border-radius: 6px;
             font-size: 12px;
-            color: #333;
+            color: var(--text-color);
             cursor: pointer;
             display: flex;
             align-items: center;
             gap: 5px;
+            position: relative;
+        }
+
+        .model-selector:hover {
+            background-color: var(--hover-color);
+        }
+
+        .model-dropdown {
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 5px;
+            width: 200px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: none;
+            z-index: 100;
+            margin-bottom: 10px;
+        }
+
+        .model-dropdown.show {
+            display: block;
+        }
+
+        .model-option {
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-color);
+        }
+
+        .model-option:hover {
+            background-color: var(--hover-color);
+        }
+
+        .model-option.active {
+            background-color: var(--active-item-bg);
         }
 
         .send-btn {
             width: 30px;
             height: 30px;
             border-radius: 50%;
-            background-color: #e0e0e0;
+            background-color: var(--send-btn-inactive);
             border: none;
             display: flex;
             align-items: center;
@@ -269,14 +321,15 @@
         }
         
         .send-btn.active {
-            background-color: #000;
+            background-color: var(--send-btn-active);
+            color: var(--bg-color);
         }
 
         /* Icons */
         .icon-new-chat {
             width: 16px;
             height: 16px;
-            border: 1px solid #333;
+            border: 1px solid var(--text-color);
             border-radius: 2px;
         }
 
@@ -293,7 +346,7 @@
         .typing-dot {
             width: 8px;
             height: 8px;
-            background-color: #ccc;
+            background-color: var(--secondary-text);
             border-radius: 50%;
             animation: bounce 1.4s infinite ease-in-out both;
         }
@@ -319,6 +372,12 @@
             Settings
         </div>
 
+        <div class="theme-btn" style="margin-bottom: 20px;">
+            <svg class="moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            <svg class="sun-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+            <span class="theme-text">Dark Mode</span>
+        </div>
+
         <div class="history-section">
             <div class="history-date">Today</div>
             <div class="history-item">hey</div>
@@ -327,19 +386,7 @@
 
     <div class="main">
         <div id="welcome-screen" class="center-content">
-            <div class="llama-icon">
-                <!-- Simple Llama SVG representation -->
-                <svg viewBox="0 0 100 100" fill="none" stroke="black" stroke-width="2">
-                    <path d="M30 60 Q 20 50 30 40 Q 35 30 30 20 Q 40 10 50 20 Q 60 10 70 20 Q 65 30 70 40 Q 80 50 70 60 L 70 80 Q 70 90 60 90 L 40 90 Q 30 90 30 80 Z" />
-                    <circle cx="40" cy="40" r="2" fill="black"/>
-                    <circle cx="60" cy="40" r="2" fill="black"/>
-                    <path d="M45 50 Q 50 55 55 50" />
-                </svg>
-            </div>
-            <div class="auth-message">
-                Cloud models require an Ollama account
-                <button class="sign-in-btn">Sign In</button>
-            </div>
+            <h1>How can I help you today?</h1>
         </div>
 
         <div id="chat-container" class="chat-container" style="display: none;">
@@ -350,9 +397,12 @@
             <div class="input-container">
                 <button class="add-btn">+</button>
                 <input type="text" id="message-input" class="message-input" placeholder="Send a message">
-                <div class="model-selector">
-                    glm-4.9-cloud
+                <div class="model-selector" id="model-selector">
+                    <span id="current-model-name">Loading...</span>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <div class="model-dropdown" id="model-dropdown">
+                        <!-- Options will be populated here -->
+                    </div>
                 </div>
                 <button id="send-btn" class="send-btn">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
@@ -364,6 +414,8 @@
     <script>
         // State
         let currentSessionId = null;
+        let currentModel = null;
+        let availableModels = [];
         
         // Elements
         const historySection = document.querySelector('.history-section');
@@ -372,11 +424,17 @@
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
         const newChatBtn = document.querySelector('.new-chat-btn');
+        const themeBtn = document.querySelector('.theme-btn');
+        const modelSelector = document.getElementById('model-selector');
+        const modelDropdown = document.getElementById('model-dropdown');
+        const currentModelName = document.getElementById('current-model-name');
 
         // Initial Load
         document.addEventListener('DOMContentLoaded', () => {
             loadSessions();
+            loadModels();
             messageInput.focus();
+            initTheme();
         });
 
         // Event Listeners
@@ -395,8 +453,57 @@
         sendBtn.addEventListener('click', sendMessage);
         
         newChatBtn.addEventListener('click', createNewSession);
+        themeBtn.addEventListener('click', toggleTheme);
+        
+        modelSelector.addEventListener('click', (e) => {
+            e.stopPropagation();
+            modelDropdown.classList.toggle('show');
+        });
+
+        document.addEventListener('click', () => {
+            modelDropdown.classList.remove('show');
+        });
 
         // Functions
+        async function loadModels() {
+            try {
+                const res = await fetch('/api/models');
+                availableModels = await res.json();
+                
+                modelDropdown.innerHTML = '';
+                availableModels.forEach(model => {
+                    const div = document.createElement('div');
+                    div.className = 'model-option';
+                    div.textContent = model.name;
+                    div.onclick = (e) => {
+                        e.stopPropagation();
+                        selectModel(model);
+                        modelDropdown.classList.remove('show');
+                    };
+                    modelDropdown.appendChild(div);
+                });
+
+                // Set default if not set
+                if (!currentModel && availableModels.length > 0) {
+                    selectModel(availableModels[0]);
+                }
+            } catch (e) {
+                console.error('Failed to load models', e);
+                currentModelName.textContent = 'Error';
+            }
+        }
+
+        function selectModel(model) {
+            currentModel = model;
+            currentModelName.textContent = model.name;
+            
+            // Update active state in dropdown
+            document.querySelectorAll('.model-option').forEach(el => {
+                if (el.textContent === model.name) el.classList.add('active');
+                else el.classList.remove('active');
+            });
+        }
+
         async function loadSessions() {
             try {
                 const res = await fetch('/api/sessions');
@@ -408,36 +515,41 @@
                     const el = document.createElement('div');
                     el.className = 'history-item';
                     el.textContent = session.name || session.id;
-                    el.onclick = () => selectSession(session.id);
+                    el.dataset.id = session.id;
+                    if (session.model) el.dataset.model = session.model;
+                    el.onclick = () => selectSession(session.id, session.model);
                     if (session.id === currentSessionId) {
                         el.classList.add('active');
                     }
                     historySection.appendChild(el);
                 });
-                
-                // If we have sessions but none selected, select the first one (or stay on welcome)
-                // Actually, let's just stay on welcome unless we restore state.
             } catch (e) {
                 console.error('Failed to load sessions', e);
             }
         }
 
-        async function selectSession(id) {
+        async function selectSession(id, modelId = null) {
             currentSessionId = id;
             
             // UI Updates
-            document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
-            // Find the element again (simple way) to add active class
-            Array.from(document.querySelectorAll('.history-item')).forEach(el => {
-                // This is a naive check, in real app we'd store ID on element
-                 // For now relying on text content match or reload is tricky without ID attr.
-                 // Let's just reload list or manually track.
+            document.querySelectorAll('.history-item').forEach(el => {
+                el.classList.toggle('active', el.dataset.id === id);
             });
+
+            // If session has a specific model associated, select it
+            if (modelId) {
+                const model = availableModels.find(m => m.id === modelId);
+                if (model) selectModel(model);
+            }
             
             welcomeScreen.style.display = 'none';
             chatContainer.style.display = 'flex';
             chatContainer.innerHTML = ''; // Clear current view
             
+            await loadChatHistory(id);
+        }
+
+        async function loadChatHistory(id) {
             try {
                 const res = await fetch(`/api/history/${id}`);
                 const history = await res.json();
@@ -497,7 +609,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         sessionId: currentSessionId,
-                        message: text
+                        message: text,
+                        model: currentModel ? currentModel.id : null
                     })
                 });
 
@@ -672,6 +785,39 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Theme Functions
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark-mode');
+                updateThemeIcon(true);
+            } else {
+                updateThemeIcon(false);
+            }
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            updateThemeIcon(isDark);
+        }
+
+        function updateThemeIcon(isDark) {
+            const text = themeBtn.querySelector('.theme-text');
+            const sun = themeBtn.querySelector('.sun-icon');
+            const moon = themeBtn.querySelector('.moon-icon');
+            if (isDark) {
+                text.textContent = 'Light Mode';
+                sun.style.display = 'block';
+                moon.style.display = 'none';
+            } else {
+                text.textContent = 'Dark Mode';
+                sun.style.display = 'none';
+                moon.style.display = 'block';
+            }
         }
     </script>
 </body>
