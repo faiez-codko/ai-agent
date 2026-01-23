@@ -4,6 +4,7 @@ import { delegate_task } from './inter_agent.js';
 import { browser_tools } from './browser.js';
 import { db_tools } from './db.js';
 import { schedulerToolDefinitions, schedulerTools } from './scheduler.js';
+import { webUiToolDefinitions, webUiTools } from './web_ui.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -212,13 +213,15 @@ export const toolDefinitions = [
       required: ["table"]
     }
   },
-  ...schedulerToolDefinitions
+  ...schedulerToolDefinitions,
+  ...webUiToolDefinitions
 ];
 
 export const tools = {
   ...browser_tools,
   ...db_tools,
   ...schedulerTools,
+  ...webUiTools,
   delegate_task,
   read_file: async ({ path: filePath }, { agent }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);

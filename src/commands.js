@@ -6,6 +6,20 @@ import { Agent } from './agent.js';
 import { writeFile, readFile } from './tools/fs.js';
 import { runCommand } from './tools/shell.js';
 import * as Diff from 'diff';
+import { webUiTools } from './tools/web_ui.js';
+
+export async function web() {
+  const spinner = ora('Starting web interface...').start();
+  try {
+    const message = await webUiTools.start_chat_ui();
+    spinner.succeed(message);
+    console.log(chalk.cyan('Press Ctrl+C to stop the server.'));
+  } catch (error) {
+    spinner.fail('Failed to start web interface');
+    console.error(chalk.red(error));
+    process.exit(1);
+  }
+}
 
 export async function setup() {
   const config = await loadConfig();
