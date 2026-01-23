@@ -21,7 +21,7 @@ export class GeminiProvider {
     }
   }
 
-  async chat(messages, tools = null) {
+  async chat(messages, tools = null, onUpdate = null) {
     try {
       // Convert standard messages format to Gemini format
       // Standard: [{ role: 'user'|'assistant'|'system', content: '...' }]
@@ -58,28 +58,63 @@ export class GeminiProvider {
       const lastMessage = messages[messages.length - 1];
       const chat = this.model.startChat(options);
 
-      const result = await chat.sendMessage(lastMessage.content);
-      const response = await result.response;
-      
-      // Check for function calls
-      const calls = response.functionCalls();
-      let toolCalls = null;
-      
-      if (calls && calls.length > 0) {
-          toolCalls = calls.map(call => ({
-              id: 'gemini-' + Math.random().toString(36).substr(2, 9),
-              type: 'function',
-              function: {
-                  name: call.name,
-                  arguments: JSON.stringify(call.args)
-              }
-          }));
-      }
+      if (onUpdate) {
+        const result = await chat.sendMessageStream(lastMessage.content);
+        let fullContent = '';
+        let toolCalls = null;
 
-      return {
-          content: response.text(), // This might throw if blocked or only function call
-          toolCalls: toolCalls
-      };
+        for await (const chunk of result.stream) {
+            const chunkText = chunk.text();
+            if (chunkText) {
+                fullContent += chunkText;
+                onUpdate({ type: 'token', content: chunkText });
+            }
+            
+            // Check for tool calls in chunk (accumulate)
+            // Gemini stream usually gives tool calls at end or in specific chunks
+            const calls = chunk.functionCalls();
+            if (calls && calls.length > 0) {
+                 if (!toolCalls) toolCalls = [];
+                 toolCalls.push(...calls.map(call => ({
+                    id: 'gemini-' + Math.random().toString(36).substr(2, 9),
+                    type: 'function',
+                    function: {
+                        name: call.name,
+                        arguments: JSON.stringify(call.args)
+                    }
+                })));
+            }
+        }
+        
+        return {
+            content: fullContent || null,
+            toolCalls: toolCalls
+        };
+
+      } else {
+        const result = await chat.sendMessage(lastMessage.content);
+        const response = await result.response;
+        
+        // Check for function calls
+        const calls = response.functionCalls();
+        let toolCalls = null;
+        
+        if (calls && calls.length > 0) {
+            toolCalls = calls.map(call => ({
+                id: 'gemini-' + Math.random().toString(36).substr(2, 9),
+                type: 'function',
+                function: {
+                    name: call.name,
+                    arguments: JSON.stringify(call.args)
+                }
+            }));
+        }
+
+        return {
+            content: response.text(), // This might throw if blocked or only function call
+            toolCalls: toolCalls
+        };
+      }
     } catch (error) {
       // Gemini throws if we try to get text() from a function call only response sometimes
       // We need to handle that gracefully

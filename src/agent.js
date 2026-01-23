@@ -104,7 +104,7 @@ For any complex task (multi-step, research, or development), you MUST use the "3
     }
   }
 
-  async chat(userMessage, confirmCallback = null) {
+  async chat(userMessage, confirmCallback = null, onUpdate = null) {
     this.memory.push({ role: 'user', content: userMessage });
     await this._maybeSummarizeHistory();
     
@@ -112,9 +112,13 @@ For any complex task (multi-step, research, or development), you MUST use the "3
     const MAX_LOOPS = 50;
     let finalResponse = null;
 
+    if (onUpdate) onUpdate({ type: 'thinking', message: 'Analyzing request...' });
+
     while (loopCount < MAX_LOOPS) {
+        loopCount++;
         const messagesForModel = this._buildContext();
-        const response = await this._safeChat(messagesForModel, this.toolsDefinition);
+        
+        const response = await this._safeChat(messagesForModel, this.toolsDefinition, onUpdate);
         try {
             sendTelegramMessage(`Agent ${this.id} response: ${response.content} \nTool Calls: ${JSON.stringify(response.toolCalls || [])}`);
         } catch {}
@@ -169,6 +173,7 @@ For any complex task (multi-step, research, or development), you MUST use the "3
         // If no tool calls, we are done
         if (!response.toolCalls || response.toolCalls.length === 0) {
             await saveChatHistory(this.id, this.memory);
+            if (onUpdate) onUpdate({ type: 'done' });
             return finalResponse || response.content;
         }
 
@@ -189,6 +194,8 @@ For any complex task (multi-step, research, or development), you MUST use the "3
             console.log(chalk.cyan(`\n🛠️  Tool Call: ${chalk.bold(toolName)}`));
             console.log(chalk.gray(`   Args: ${JSON.stringify(args)}`));
 
+            if (onUpdate) onUpdate({ type: 'tool_start', tool: toolName });
+
             let result;
             try {
                 if (this.tools[toolName]) {
@@ -197,37 +204,40 @@ For any complex task (multi-step, research, or development), you MUST use the "3
                 } else {
                     result = `Error: Tool ${toolName} not found.`;
                 }
-            } catch (error) {
-                result = `Error executing tool: ${error.message}`;
-                try {
-                    await sendTelegramMessage(`Agent ${this.id} tool error in ${toolName}: ${error.message || error}`);
-                } catch {}
+            } catch (e) {
+                result = `Error executing tool ${toolName}: ${e.message}`;
             }
 
-            let textResult = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-            const maxToolChars = 4000;
-            if (textResult.length > maxToolChars) {
-                textResult = textResult.slice(0, maxToolChars) + `... [truncated ${textResult.length - maxToolChars} characters]`;
-            }
-            const resultPreview = textResult.length > 200 ? textResult.slice(0, 200) + '...' : textResult;
-            console.log(chalk.gray(`   Result: ${resultPreview}`));
+            if (onUpdate) onUpdate({ type: 'tool_end', tool: toolName, result: typeof result === 'string' ? result.substring(0, 100) + '...' : 'Done' });
 
-            // Push tool result to memory
+            // Add result to memory
             this.memory.push({
                 role: 'tool',
                 tool_call_id: call.id,
                 name: toolName,
-                content: textResult
+                content: typeof result === 'string' ? result : JSON.stringify(result)
             });
         }
-        
-        loopCount++;
     }
+    
+    if (onUpdate) onUpdate({ type: 'done' });
+    return finalResponse;
+  }
 
-    // writeFile('./memory.json', JSON.stringify(this.memory, null, 2));
-    await saveChatHistory(this.id, this.memory);
-
-    return "Error: Maximum tool loop limit reached.";
+  async _safeChat(messages, tools, onUpdate = null) {
+      try {
+          return await this.provider.chat(messages, tools, onUpdate);
+      } catch (e) {
+        const message = e && e.message ? String(e.message) : String(e);
+        if (message.includes('Input tokens exceed the configured limit')) {
+            const smaller = this._buildContext(20);
+            return await this.provider.chat(smaller, tools, onUpdate);
+        }
+        try {
+            await sendTelegramMessage(`Agent ${this.id} provider.chat error: ${message}`);
+        } catch {}
+        throw e;
+      }
   }
 
   _buildContext(maxMessages = 40) {
@@ -235,22 +245,6 @@ For any complex task (multi-step, research, or development), you MUST use the "3
     const nonSystem = this.memory.filter(m => m.role !== 'system');
     const recent = nonSystem.slice(-maxMessages);
     return [...systemMessages, ...recent];
-  }
-
-  async _safeChat(messages, toolsDefinition) {
-    try {
-        return await this.provider.chat(messages, toolsDefinition);
-    } catch (e) {
-        const message = e && e.message ? String(e.message) : String(e);
-        if (message.includes('Input tokens exceed the configured limit')) {
-            const smaller = this._buildContext(20);
-            return await this.provider.chat(smaller, toolsDefinition);
-        }
-        try {
-            await sendTelegramMessage(`Agent ${this.id} provider.chat error: ${message}`);
-        } catch {}
-        throw e;
-    }
   }
 
   async _maybeSummarizeHistory() {

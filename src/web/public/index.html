@@ -487,12 +487,12 @@
             scrollToBottom();
 
             // Show thinking animation
-            const thinkingId = showThinking();
+            let thinkingId = showThinking();
             scrollToBottom();
 
-            // Send to API
+            // Send to API (Streaming)
             try {
-                const res = await fetch('/api/chat', {
+                const response = await fetch('/api/chat/stream', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -500,20 +500,114 @@
                         message: text
                     })
                 });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                
+                let currentResponseDiv = null;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop(); // Keep incomplete line
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const dataStr = line.slice(6);
+                            if (!dataStr || dataStr === '[DONE]') continue;
+                            
+                            try {
+                                const data = JSON.parse(dataStr);
+                                
+                                if (data.type === 'thinking') {
+                                    // Initial thinking state
+                                    updateThinking(thinkingId, data.message || 'Thinking...');
+                                } else if (data.type === 'tool_start') {
+                                    updateThinking(thinkingId, `Running tool: ${data.tool}...`);
+                                } else if (data.type === 'tool_end') {
+                                    updateThinking(thinkingId, `Finished tool: ${data.tool}`);
+                                } else if (data.type === 'token') {
+                                    // Remove thinking bubble when first token arrives
+                                    // Or keep it? Let's remove it for cleaner UI as per typical chat UX
+                                    removeThinking(thinkingId);
+                                    
+                                    if (!currentResponseDiv) {
+                                        currentResponseDiv = createMessageDiv('assistant');
+                                        chatContainer.appendChild(currentResponseDiv);
+                                    }
+                                    
+                                    // Append text to current div
+                                    // We need a way to append raw text and render markdown
+                                    // For simplicity, we'll store full text in a data attribute and re-render
+                                    const contentDiv = currentResponseDiv.querySelector('.message-content');
+                                    const currentText = contentDiv.getAttribute('data-raw') || '';
+                                    const newText = currentText + data.content;
+                                    contentDiv.setAttribute('data-raw', newText);
+                                    renderMarkdown(contentDiv, newText);
+                                    scrollToBottom();
+                                } else if (data.type === 'done') {
+                                    removeThinking(thinkingId);
+                                } else if (data.type === 'error') {
+                                    removeThinking(thinkingId);
+                                    appendMessage('assistant', 'Error: ' + data.error);
+                                }
+                            } catch (e) {
+                                console.error('Error parsing SSE data', e);
+                            }
+                        }
+                    }
+                }
                 
                 removeThinking(thinkingId);
-                
-                const data = await res.json();
-                
-                if (data.error) {
-                    appendMessage('assistant', 'Error: ' + data.error);
-                } else {
-                    appendMessage('assistant', data.response);
-                }
                 scrollToBottom();
             } catch (e) {
                 removeThinking(thinkingId);
                 appendMessage('assistant', 'Error sending message');
+                console.error(e);
+            }
+        }
+
+        function createMessageDiv(role) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${role}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            msgDiv.appendChild(contentDiv);
+            
+            return msgDiv;
+        }
+
+        function updateThinking(id, text) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            
+            // If it's the dot animation, replace with text or append text
+            // Let's replace the dots with text for tool status
+            // But we want to keep the animation if it's just "Thinking..."
+            
+            const indicator = el.querySelector('.typing-indicator');
+            if (indicator) {
+                // Check if we already have text
+                const textSpan = el.querySelector('.thinking-text');
+                if (textSpan) {
+                    textSpan.textContent = text;
+                } else {
+                    // Create text span
+                    const span = document.createElement('span');
+                    span.className = 'thinking-text';
+                    span.style.marginLeft = '10px';
+                    span.style.fontSize = '12px';
+                    span.style.color = '#888';
+                    span.textContent = text;
+                    // indicator.appendChild(span); // Don't append to flex container with dots easily
+                    // Let's just append to message div
+                    el.appendChild(span);
+                }
             }
         }
 
@@ -541,38 +635,32 @@
             const el = document.getElementById(id);
             if (el) el.remove();
         }
-
-        function appendMessage(role, content) {
-            if (!content) return; // Skip empty content (e.g. tool calls only)
-            
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${role}`;
-            
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'message-content';
-            
-            // Simple markdown-ish rendering
-            // Replace newlines with <br>
-            // Detect code blocks
+        
+        function renderMarkdown(element, content) {
             if (content.includes('```')) {
-                // Very basic code block handling
                 const parts = content.split('```');
                 let html = '';
                 parts.forEach((part, index) => {
                     if (index % 2 === 1) {
-                        // Code
-                        html += `<pre><code>${escapeHtml(part)}</code></pre>`;
+                         html += `<pre><code>${escapeHtml(part)}</code></pre>`;
                     } else {
-                        // Text
-                        html += escapeHtml(part).replace(/\n/g, '<br>');
+                         html += escapeHtml(part).replace(/\n/g, '<br>');
                     }
                 });
-                contentDiv.innerHTML = html;
+                element.innerHTML = html;
             } else {
-                contentDiv.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
+                element.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
             }
+        }
+
+        function appendMessage(role, content) {
+            if (!content) return; 
             
-            msgDiv.appendChild(contentDiv);
+            const msgDiv = createMessageDiv(role);
+            const contentDiv = msgDiv.querySelector('.message-content');
+            contentDiv.setAttribute('data-raw', content);
+            renderMarkdown(contentDiv, content);
+            
             chatContainer.appendChild(msgDiv);
         }
 

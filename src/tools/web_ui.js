@@ -97,6 +97,46 @@ export const webUiTools = {
     });
 
     // Send message
+    // Stream message
+    app.post('/api/chat/stream', async (req, res) => {
+        try {
+            const { sessionId, message } = req.body;
+
+            if (!sessionId || !message) {
+                return res.status(400).send('Missing sessionId or message');
+            }
+
+            const mgr = await getManager();
+            const agent = mgr.getAgent(sessionId);
+            if (!agent) {
+                return res.status(404).send('Session not found');
+            }
+
+            // Setup SSE
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+
+            // Simple auto-confirmation for tools
+            const confirmCallback = async (msg) => {
+                console.log(`[WebUI Auto-Confirm] ${msg}`);
+                return true;
+            };
+
+            const onUpdate = (data) => {
+                res.write(`data: ${JSON.stringify(data)}\n\n`);
+            };
+
+            await agent.chat(message, confirmCallback, onUpdate);
+            
+            res.end();
+        } catch (e) {
+            console.error('Chat stream error:', e);
+            res.write(`data: ${JSON.stringify({ type: 'error', error: e.message })}\n\n`);
+            res.end();
+        }
+    });
+
     app.post('/api/chat', async (req, res) => {
         try {
             const { sessionId, message } = req.body;
