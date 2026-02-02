@@ -46,3 +46,22 @@ export async function listPersonas() {
         return [];
     }
 }
+
+export async function savePersona(persona) {
+    const { id, name, systemPrompt, allowedTools, description } = persona;
+    
+    if (!id || !name || !systemPrompt) {
+        throw new Error('Missing required fields: id, name, systemPrompt');
+    }
+
+    const filePath = path.join(__dirname, `${id}.json`);
+    const data = {
+        name,
+        description: description || '',
+        systemPrompt,
+        allowedTools: allowedTools || []
+    };
+
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+    return { id, ...data };
+}

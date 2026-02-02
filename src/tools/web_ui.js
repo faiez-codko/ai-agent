@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { AgentManager } from '../agentManager.js';
+import { savePersona, listPersonas } from '../personas/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,6 +84,36 @@ export const webUiTools = {
             { id: 'nomnom', name: 'NomNom by @Itachi-1824' },
         ];
         res.json(models);
+    });
+
+    // Get available personas
+    app.get('/api/personas', async (req, res) => {
+        try {
+            const personas = await listPersonas();
+            res.json(personas);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Create new persona
+    app.post('/api/personas', async (req, res) => {
+        try {
+            const persona = await savePersona(req.body);
+            res.json(persona);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Get available tools
+    app.get('/api/tools', async (req, res) => {
+        try {
+            const { toolDefinitions } = await import('./index.js');
+            res.json(toolDefinitions);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     // Create new session
