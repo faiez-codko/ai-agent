@@ -167,8 +167,21 @@ For any complex task (multi-step, research, or development), you MUST use the "3
             }
         }
 
+        // Handle Assistant Response
         // If content is present, add it to memory (some models output thought + tool call)
-        if (response.content) {
+        // CRITICAL FIX: If tool calls are present, they MUST be included in the same assistant message
+        // to satisfy OpenAI API requirements (tool_calls must be on the assistant message preceding tool roles).
+        
+        if (response.toolCalls && response.toolCalls.length > 0) {
+             this.memory.push({ 
+                 role: 'assistant', 
+                 content: response.content || null, 
+                 tool_calls: response.toolCalls 
+             });
+             if (response.content) {
+                 finalResponse = response.content;
+             }
+        } else if (response.content) {
             this.memory.push({ role: 'assistant', content: response.content });
             finalResponse = response.content;
         }
@@ -181,15 +194,6 @@ For any complex task (multi-step, research, or development), you MUST use the "3
         }
 
         // If we have tool calls, execute them
-        // Note: We need to push the tool call request to memory for OpenAI
-        if (!response.content) {
-             this.memory.push({ 
-                 role: 'assistant', 
-                 content: null, 
-                 tool_calls: response.toolCalls 
-             });
-        }
-
         for (const call of response.toolCalls) {
             const toolName = call.function.name;
             const args = JSON.parse(call.function.arguments);
@@ -246,7 +250,13 @@ For any complex task (multi-step, research, or development), you MUST use the "3
   _buildContext(maxMessages = 40) {
     const systemMessages = this.memory.filter(m => m.role === 'system');
     const nonSystem = this.memory.filter(m => m.role !== 'system');
-    const recent = nonSystem.slice(-maxMessages);
+    let recent = nonSystem.slice(-maxMessages);
+    
+    // Ensure context doesn't start with a 'tool' message (which would be orphaned)
+    while (recent.length > 0 && recent[0].role === 'tool') {
+        recent.shift();
+    }
+    
     return [...systemMessages, ...recent];
   }
 
