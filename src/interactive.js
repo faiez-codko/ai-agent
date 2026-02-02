@@ -1,6 +1,7 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { setup, read, update, fix, run } from './commands.js';
+import { clearChatHistory } from './chatStorage.js';
 import { AgentManager } from './agentManager.js';
 import ora from 'ora';
 
@@ -166,6 +167,7 @@ async function handleCommand(inputLine, manager) {
           }
           break;
       case '/clear':
+        await clearChatHistory(agent.id);
         agent.memory = [];
         await agent.init();
         console.log(chalk.yellow('Memory cleared.'));

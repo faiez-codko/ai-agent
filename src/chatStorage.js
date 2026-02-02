@@ -5,7 +5,7 @@ import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 
 const DB_FILE = path.join(process.cwd(), '.agent', '.ai-agent-chat.sqlite');
-const MAX_SIZE_BYTES = 100 * 1024 * 1024;
+const MAX_SIZE_BYTES = 100 * 1024 * 1024; // Keep this for file size check if needed, but per-agent limits are handled differently now
 
 let dbPromise = null;
 
@@ -15,12 +15,83 @@ async function initDb() {
         filename: DB_FILE,
         driver: sqlite3.Database
     });
+
+    await db.exec('PRAGMA foreign_keys = ON;');
+
+    // 1. Agents Table
     await db.exec(`
-        CREATE TABLE IF NOT EXISTS chat_history (
+        CREATE TABLE IF NOT EXISTS agents (
             agent_id TEXT PRIMARY KEY,
-            messages TEXT NOT NULL
-        )
+            agent_name TEXT,
+            about_agent TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     `);
+
+    // 2. Chat Sessions Table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent_id TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (agent_id) REFERENCES agents(agent_id) ON DELETE CASCADE
+        );
+    `);
+
+    // 3. Chat Messages Table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS chat (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT,
+            tool_calls TEXT,
+            tool_call_id TEXT,
+            name TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+        );
+    `);
+
+    // Migration Check
+    try {
+        const legacyTable = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='chat_history'");
+        if (legacyTable) {
+            console.log("Migrating legacy chat history...");
+            const rows = await db.all("SELECT * FROM chat_history");
+            for (const row of rows) {
+                const agentId = row.agent_id;
+                let messages = [];
+                try { messages = JSON.parse(row.messages); } catch (e) {}
+
+                if (messages.length > 0) {
+                    // Create agent placeholder
+                    await db.run("INSERT OR IGNORE INTO agents (agent_id, agent_name) VALUES (?, ?)", agentId, agentId);
+                    
+                    // Create session
+                    const result = await db.run("INSERT INTO chat_sessions (agent_id) VALUES (?)", agentId);
+                    const sessionId = result.lastID;
+
+                    // Insert messages
+                    for (const msg of messages) {
+                         await db.run(
+                            "INSERT INTO chat (session_id, role, content, tool_calls, tool_call_id, name) VALUES (?, ?, ?, ?, ?, ?)",
+                            sessionId, 
+                            msg.role, 
+                            msg.content || '', 
+                            msg.tool_calls ? JSON.stringify(msg.tool_calls) : null,
+                            msg.tool_call_id || null,
+                            msg.name || null
+                        );
+                    }
+                }
+            }
+            await db.exec("DROP TABLE chat_history");
+        }
+    } catch (e) {
+        console.error("Migration warning:", e);
+    }
+
     return db;
 }
 
@@ -34,69 +105,105 @@ function getDb() {
 export async function loadChatHistory(agentId) {
     try {
         const db = await getDb();
-        const row = await db.get(
-            'SELECT messages FROM chat_history WHERE agent_id = ?',
+        
+        // Get the latest session for this agent
+        const session = await db.get(
+            "SELECT id FROM chat_sessions WHERE agent_id = ? ORDER BY id DESC LIMIT 1",
             agentId
         );
-        if (!row || !row.messages) {
+
+        if (!session) {
             return [];
         }
-        return JSON.parse(row.messages);
+
+        const rows = await db.all(
+            "SELECT role, content, tool_calls, tool_call_id, name FROM chat WHERE session_id = ? ORDER BY id ASC",
+            session.id
+        );
+
+        return rows.map(row => {
+            const msg = {
+                role: row.role,
+                content: row.content
+            };
+            if (row.tool_calls) {
+                try { msg.tool_calls = JSON.parse(row.tool_calls); } catch (e) {}
+            }
+            if (row.tool_call_id) msg.tool_call_id = row.tool_call_id;
+            if (row.name) msg.name = row.name;
+            return msg;
+        });
+
     } catch (error) {
+        console.error("Error loading chat history:", error);
         return [];
     }
 }
 
-export async function saveChatHistory(agentId, messages) {
+export async function saveChatHistory(agentId, messages, agentInstance = null) {
     const db = await getDb();
 
-    let storedMessages = Array.isArray(messages) ? messages : [];
-    let content = JSON.stringify(storedMessages, null, 2);
-    let size = Buffer.byteLength(content, 'utf8');
-
-    if (size > MAX_SIZE_BYTES) {
-        console.warn(
-            `Chat history size (${(size / 1024 / 1024).toFixed(
-                2
-            )}MB) exceeds limit (30MB). Clearing history for ${agentId}...`
+    // 1. Ensure Agent Exists
+    if (agentInstance) {
+        await db.run(
+            `INSERT INTO agents (agent_id, agent_name, about_agent) 
+             VALUES (?, ?, ?) 
+             ON CONFLICT(agent_id) DO UPDATE SET 
+                agent_name = excluded.agent_name,
+                about_agent = excluded.about_agent`,
+            agentId,
+            agentInstance.name || agentId,
+            agentInstance.persona ? agentInstance.persona.description : null
         );
-
-        const systemPrompt = storedMessages.find(m => m.role === 'system');
-        const recent = storedMessages.slice(-5);
-        storedMessages = systemPrompt ? [systemPrompt, ...recent] : recent;
-
-        content = JSON.stringify(storedMessages, null, 2);
-        size = Buffer.byteLength(content, 'utf8');
-
-        if (size > MAX_SIZE_BYTES) {
-            console.warn(
-                'Chat history for this agent still exceeds limit. Keeping minimal context.'
-            );
-            const minimal = systemPrompt ? [systemPrompt] : [];
-            storedMessages = minimal;
-            content = JSON.stringify(storedMessages, null, 2);
-        }
+    } else {
+        // Fallback if no instance provided
+        await db.run("INSERT OR IGNORE INTO agents (agent_id, agent_name) VALUES (?, ?)", agentId, agentId);
     }
 
-    await db.run(
-        `
-        INSERT INTO chat_history (agent_id, messages)
-        VALUES (?, ?)
-        ON CONFLICT(agent_id) DO UPDATE SET messages = excluded.messages
-    `,
-        agentId,
-        content
+    // 2. Get or Create Session
+    // For now, we reuse the latest session or create one if none.
+    // Since we overwrite history in the current logic, let's keep it simple:
+    // If we are saving, we are appending to the current "active" session.
+    let session = await db.get(
+        "SELECT id FROM chat_sessions WHERE agent_id = ? ORDER BY id DESC LIMIT 1",
+        agentId
     );
+
+    if (!session) {
+        const result = await db.run("INSERT INTO chat_sessions (agent_id) VALUES (?)", agentId);
+        session = { id: result.lastID };
+    }
+
+    // 3. Sync Messages
+    // Strategy: Delete all for this session and re-insert. 
+    // This handles pruning/summarization correctly (where old messages are removed from memory).
+    await db.run("DELETE FROM chat WHERE session_id = ?", session.id);
+
+    const stmt = await db.prepare(
+        "INSERT INTO chat (session_id, role, content, tool_calls, tool_call_id, name) VALUES (?, ?, ?, ?, ?, ?)"
+    );
+
+    for (const msg of messages) {
+        await stmt.run(
+            session.id,
+            msg.role,
+            msg.content || '',
+            msg.tool_calls ? JSON.stringify(msg.tool_calls) : null,
+            msg.tool_call_id || null,
+            msg.name || null
+        );
+    }
+    await stmt.finalize();
 }
 
 export async function clearChatHistory(agentId = null) {
+    const db = await getDb();
     if (agentId) {
-        try {
-            const db = await getDb();
-            await db.run('DELETE FROM chat_history WHERE agent_id = ?', agentId);
-        } catch (e) {}
+        await db.run("DELETE FROM agents WHERE agent_id = ?", agentId);
     } else {
-        await fs.unlink(DB_FILE).catch(() => {});
-        dbPromise = null;
+        // Drop all data?
+        await db.run("DELETE FROM chat");
+        await db.run("DELETE FROM chat_sessions");
+        await db.run("DELETE FROM agents");
     }
 }

@@ -173,7 +173,7 @@ For any complex task (multi-step, research, or development), you MUST use the "3
 
         // If no tool calls, we are done
         if (!response.toolCalls || response.toolCalls.length === 0) {
-            await saveChatHistory(this.id, this.memory);
+            await saveChatHistory(this.id, this.memory, this);
             if (onUpdate) onUpdate({ type: 'done' });
             return finalResponse || response.content;
         }

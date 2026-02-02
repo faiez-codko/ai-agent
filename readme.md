@@ -94,6 +94,13 @@ ai-agent
 (lead) > /delegate senior "Implement the core API based on PM's specs"
 ```
 
+### Web Interface
+Start the browser-based chat interface:
+```bash
+ai-agent web
+```
+This will start a local server at `http://localhost:8456` where you can chat with agents in a modern UI.
+
 ### Security & Safe Mode
 ⚠️ **Power User Tool**: This agent executes real shell commands.
 *   **Safe Mode**: Type `/safe-mode` to enable. When enabled, the agent will **never** execute `run_command`, `write_file`, or `delete_file` without your explicit confirmation.
