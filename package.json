@@ -20,10 +20,10 @@
   },
   "name": "ai-agent",
   "version": "1.0.0",
-  "description": "",
+  "description": "A powerful, multi-personality AI agent for your terminal. This tool allows you to collaborate with a team of specialized AI agents (Project Manager, Team Lead, Engineers, QA) to automate coding tasks, manage projects, and execute system commands directly from your shell.",
   "main": "index.js",
   "bin": {
-    "ai-agent": "./index.js"
+    "ai-agent": "index.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -31,5 +31,14 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/faiez-codko/ai-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/faiez-codko/ai-agent/issues"
+  },
+  "homepage": "https://github.com/faiez-codko/ai-agent#readme"
 }
