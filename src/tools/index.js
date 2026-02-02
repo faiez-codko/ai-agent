@@ -5,6 +5,8 @@ import { browser_tools } from './browser.js';
 import { db_tools } from './db.js';
 import { schedulerToolDefinitions, schedulerTools } from './scheduler.js';
 import { webUiToolDefinitions, webUiTools } from './web_ui.js';
+import { smsToolDefinitions, smsTools } from './sms.js';
+import { visionToolDefinitions, visionTools } from './vision.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -214,7 +216,9 @@ export const toolDefinitions = [
     }
   },
   ...schedulerToolDefinitions,
-  ...webUiToolDefinitions
+  ...webUiToolDefinitions,
+  ...smsToolDefinitions,
+  ...visionToolDefinitions
 ];
 
 export const tools = {
@@ -222,6 +226,8 @@ export const tools = {
   ...db_tools,
   ...schedulerTools,
   ...webUiTools,
+  ...smsTools,
+  ...visionTools,
   delegate_task,
   read_file: async ({ path: filePath }, { agent }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);

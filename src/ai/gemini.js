@@ -27,15 +27,33 @@ export class GeminiProvider {
       // Standard: [{ role: 'user'|'assistant'|'system', content: '...' }]
       // Gemini: history: [{ role: 'user'|'model', parts: [{ text: '...' }] }]
       
+      const mapContent = (content) => {
+          if (typeof content === 'string') return [{ text: content }];
+          if (Array.isArray(content)) {
+              return content.map(part => {
+                  if (part.type === 'text') {
+                      return { text: part.text };
+                  } else if (part.type === 'image_url') {
+                      // Extract base64 and mime type from data URL
+                      // Format: data:image/png;base64,.....
+                      const match = part.image_url.url.match(/^data:(.*?);base64,(.*)$/);
+                      if (match) {
+                          return {
+                              inlineData: {
+                                  mimeType: match[1],
+                                  data: match[2]
+                              }
+                          };
+                      }
+                  }
+                  return null;
+              }).filter(Boolean);
+          }
+          return [];
+      };
+
       const history = messages.slice(0, -1).map(msg => {
-          const parts = [];
-          if (msg.content) parts.push({ text: msg.content });
-          
-          // Map tool calls if they exist in history (simplified for now)
-          // Gemini expects functionCall in parts if role is model
-          // And functionResponse in parts if role is function/tool
-          // This mapping is complex for cross-provider compatibility.
-          // For now, let's assume text-only history for simplicity or basic text mapping.
+          const parts = mapContent(msg.content);
           
           return {
             role: msg.role === 'assistant' ? 'model' : 'user',
@@ -56,10 +74,12 @@ export class GeminiProvider {
       }
 
       const lastMessage = messages[messages.length - 1];
+      const lastMessageParts = mapContent(lastMessage.content);
+
       const chat = this.model.startChat(options);
 
       if (onUpdate) {
-        const result = await chat.sendMessageStream(lastMessage.content);
+        const result = await chat.sendMessageStream(lastMessageParts);
         let fullContent = '';
         let toolCalls = null;
 
@@ -92,7 +112,7 @@ export class GeminiProvider {
         };
 
       } else {
-        const result = await chat.sendMessage(lastMessage.content);
+        const result = await chat.sendMessage(lastMessageParts);
         const response = await result.response;
         
         // Check for function calls

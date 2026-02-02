@@ -1,4 +1,6 @@
 import puppeteer from 'puppeteer';
+import path from 'path';
+import fs from 'fs/promises';
 
 async function getBrowser(agent) {
     if (agent.browser) {
@@ -102,45 +104,54 @@ export const browser_tools = {
     browser_eval: async ({ script }, { agent }) => {
         const { page } = await getBrowser(agent);
         try {
-            console.log(`Evaluating script...`);
-            // evaluate accepts a string which is evaluated in page context
-            const result = await page.evaluate((js) => {
-                try {
-                    // eslint-disable-next-line no-eval
-                    return eval(js);
-                } catch (e) {
-                    return `JS Error: ${e.toString()}`;
-                }
+            const result = await page.evaluate((code) => {
+                return eval(code);
             }, script);
-            
-            return `Result: ${typeof result === 'object' ? JSON.stringify(result, null, 2) : result}`;
+            return JSON.stringify(result);
         } catch (e) {
-            return `Error evaluating JS: ${e.message}`;
+            return `Error evaluating script: ${e.message}`;
         }
     },
 
-    browser_fetch: async ({ url, method = 'GET', headers = {}, body = null }) => {
+    browser_fetch: async ({ url, method, headers, body }, { agent }) => {
+        // Use node-fetch or built-in fetch
         try {
-            console.log(`Fetching ${url} with method ${method}...`);
-            
             const options = {
-                method,
-                headers,
+                method: method || 'GET',
+                headers: headers || {},
                 body: body ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined
             };
-
-            const response = await fetch(url, options);
-            const text = await response.text();
-
-            return JSON.stringify({
-                status: response.status,
-                statusText: response.statusText,
-                headers: Object.fromEntries(response.headers.entries()),
-                body: text
-            }, null, 2);
-            
+            const res = await fetch(url, options);
+            const text = await res.text();
+            return `Status: ${res.status}\nBody:\n${text.slice(0, 2000)}`;
         } catch (e) {
-            return `Error executing fetch: ${e.message}`;
+            return `Fetch error: ${e.message}`;
+        }
+    },
+
+    browser_screenshot: async ({ name, selector, fullPage }, { agent }) => {
+        const { page } = await getBrowser(agent);
+        try {
+            const screenshotsDir = path.join(process.cwd(), '.agent', 'screenshots');
+            await fs.mkdir(screenshotsDir, { recursive: true });
+            
+            const filename = name ? `${name}.png` : `screenshot_${Date.now()}.png`;
+            const filePath = path.join(screenshotsDir, filename);
+
+            let element = page;
+            if (selector) {
+                element = await page.$(selector);
+                if (!element) throw new Error(`Selector "${selector}" not found`);
+            }
+
+            await element.screenshot({
+                path: filePath,
+                fullPage: fullPage || false
+            });
+
+            return `Screenshot saved to ${filePath}`;
+        } catch (e) {
+            return `Error taking screenshot: ${e.message}`;
         }
     }
 };
