@@ -45,7 +45,7 @@ export const webUiTools = {
     }
 
     const app = express();
-    app.use(express.json());
+    app.use(express.json({ limit: '50mb' }));
     app.use(express.static(PUBLIC_DIR));
 
     // API Routes
@@ -120,10 +120,15 @@ export const webUiTools = {
     // Stream message
     app.post('/api/chat/stream', async (req, res) => {
         try {
-            const { sessionId, message, model } = req.body;
+            const { sessionId, message, model, images } = req.body;
 
-            if (!sessionId || !message) {
-                return res.status(400).send('Missing sessionId or message');
+            console.log(`[WebUI] Stream Request: session=${sessionId}, message length=${message ? message.length : 0}, images count=${images ? images.length : 0}`);
+            if (images && images.length > 0) {
+                console.log(`[WebUI] First image size: ${images[0].length} chars`);
+            }
+
+            if (!sessionId || (!message && (!images || images.length === 0))) {
+                return res.status(400).send('Missing sessionId or message content');
             }
 
             const mgr = await getManager();
@@ -135,6 +140,18 @@ export const webUiTools = {
             // Update model if requested
             if (model) {
                 await agent.updateModel(model);
+            }
+
+            // Construct user message (text or multimodal)
+            let userMessage = message;
+            if (images && images.length > 0) {
+                userMessage = [
+                    { type: 'text', text: message || '' },
+                    ...images.map(img => ({
+                        type: 'image_url',
+                        image_url: { url: img }
+                    }))
+                ];
             }
 
             // Setup SSE
@@ -152,7 +169,7 @@ export const webUiTools = {
                 res.write(`data: ${JSON.stringify(data)}\n\n`);
             };
 
-            await agent.chat(message, confirmCallback, onUpdate);
+            await agent.chat(userMessage, confirmCallback, onUpdate);
             
             res.end();
         } catch (e) {

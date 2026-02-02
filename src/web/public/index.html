@@ -358,6 +358,62 @@
             0%, 80%, 100% { transform: scale(0); }
             40% { transform: scale(1); }
         }
+
+        /* Attachment Preview */
+        .attachment-preview {
+            display: flex;
+            gap: 10px;
+            padding: 0 10px 10px 10px;
+            overflow-x: auto;
+            max-width: 700px;
+            width: 100%;
+            display: none;
+        }
+
+        .attachment-preview.show {
+            display: flex;
+        }
+
+        .preview-item {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .preview-remove {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            cursor: pointer;
+            border: none;
+        }
+        
+        /* Image in chat */
+        .message-image {
+            max-width: 300px;
+            border-radius: 8px;
+            margin-top: 5px;
+            display: block;
+            border: 1px solid var(--border-color);
+        }
     </style>
 </head>
 <body>
@@ -394,10 +450,17 @@
         </div>
 
         <div class="input-area">
-            <div class="input-container">
-                <button class="add-btn">+</button>
-                <input type="text" id="message-input" class="message-input" placeholder="Send a message">
-                <div class="model-selector" id="model-selector">
+            <div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+                <div id="attachment-preview" class="attachment-preview">
+                    <!-- Preview items -->
+                </div>
+                <div class="input-container">
+                    <button class="add-btn" id="attach-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                    </button>
+                    <input type="file" id="image-upload" accept="image/*" multiple style="display: none;">
+                    <input type="text" id="message-input" class="message-input" placeholder="Send a message">
+                    <div class="model-selector" id="model-selector">
                     <span id="current-model-name">Loading...</span>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     <div class="model-dropdown" id="model-dropdown">
@@ -406,7 +469,7 @@
                 </div>
                 <button id="send-btn" class="send-btn">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
-                </button>
+                </div>
             </div>
         </div>
     </div>
@@ -416,6 +479,7 @@
         let currentSessionId = null;
         let currentModel = null;
         let availableModels = [];
+        let pendingImages = []; // Array of base64 strings
         
         // Elements
         const historySection = document.querySelector('.history-section');
@@ -428,6 +492,10 @@
         const modelSelector = document.getElementById('model-selector');
         const modelDropdown = document.getElementById('model-dropdown');
         const currentModelName = document.getElementById('current-model-name');
+        
+        const attachBtn = document.getElementById('attach-btn');
+        const imageUpload = document.getElementById('image-upload');
+        const attachmentPreview = document.getElementById('attachment-preview');
 
         // Initial Load
         document.addEventListener('DOMContentLoaded', () => {
@@ -443,11 +511,7 @@
         });
         
         messageInput.addEventListener('input', () => {
-            if (messageInput.value.trim()) {
-                sendBtn.classList.add('active');
-            } else {
-                sendBtn.classList.remove('active');
-            }
+            updateSendBtn();
         });
 
         sendBtn.addEventListener('click', sendMessage);
@@ -463,6 +527,74 @@
         document.addEventListener('click', () => {
             modelDropdown.classList.remove('show');
         });
+        
+        // Image Upload Handlers
+        attachBtn.addEventListener('click', () => {
+            imageUpload.click();
+        });
+
+        imageUpload.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            if (!files.length) return;
+
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const base64 = e.target.result;
+                    pendingImages.push(base64);
+                    renderPreviews();
+                    updateSendBtn();
+                };
+                reader.readAsDataURL(file);
+            });
+            
+            // Reset input so same file can be selected again
+            imageUpload.value = '';
+        });
+
+        function renderPreviews() {
+            attachmentPreview.innerHTML = '';
+            
+            if (pendingImages.length > 0) {
+                attachmentPreview.classList.add('show');
+            } else {
+                attachmentPreview.classList.remove('show');
+            }
+
+            pendingImages.forEach((img, index) => {
+                const item = document.createElement('div');
+                item.className = 'preview-item';
+                
+                const image = document.createElement('img');
+                image.src = img;
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'preview-remove';
+                removeBtn.textContent = '×';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    removeImage(index);
+                };
+                
+                item.appendChild(image);
+                item.appendChild(removeBtn);
+                attachmentPreview.appendChild(item);
+            });
+        }
+
+        function removeImage(index) {
+            pendingImages.splice(index, 1);
+            renderPreviews();
+            updateSendBtn();
+        }
+        
+        function updateSendBtn() {
+            if (messageInput.value.trim() || pendingImages.length > 0) {
+                sendBtn.classList.add('active');
+            } else {
+                sendBtn.classList.remove('active');
+            }
+        }
 
         // Functions
         async function loadModels() {
@@ -556,7 +688,16 @@
                 
                 history.forEach(msg => {
                     if (msg.role === 'user' || msg.role === 'assistant') {
-                         appendMessage(msg.role, msg.content);
+                         if (Array.isArray(msg.content)) {
+                             // Handle multimodal content
+                             const textPart = msg.content.find(c => c.type === 'text');
+                             const imageParts = msg.content.filter(c => c.type === 'image_url');
+                             const text = textPart ? textPart.text : '';
+                             const images = imageParts.map(c => c.image_url.url);
+                             appendMessage(msg.role, text, images);
+                         } else {
+                             appendMessage(msg.role, msg.content);
+                         }
                     }
                 });
                 
@@ -583,7 +724,9 @@
 
         async function sendMessage() {
             const text = messageInput.value.trim();
-            if (!text) return;
+            const images = [...pendingImages];
+            
+            if (!text && images.length === 0) return;
             
             // If no session, create one first
             if (!currentSessionId) {
@@ -592,10 +735,12 @@
 
             // Clear input
             messageInput.value = '';
-            sendBtn.classList.remove('active');
+            pendingImages = [];
+            renderPreviews();
+            updateSendBtn();
             
             // Show user message
-            appendMessage('user', text);
+            appendMessage('user', text, images);
             scrollToBottom();
 
             // Show thinking animation
@@ -604,15 +749,21 @@
 
             // Send to API (Streaming)
             try {
+                console.log('Sending message:', { text, imagesCount: images.length });
                 const response = await fetch('/api/chat/stream', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         sessionId: currentSessionId,
                         message: text,
+                        images: images,
                         model: currentModel ? currentModel.id : null
                     })
                 });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                }
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -766,13 +917,34 @@
             }
         }
 
-        function appendMessage(role, content) {
-            if (!content) return; 
+        function appendMessage(role, content, images = []) {
+            if (!content && (!images || images.length === 0)) return; 
             
             const msgDiv = createMessageDiv(role);
             const contentDiv = msgDiv.querySelector('.message-content');
-            contentDiv.setAttribute('data-raw', content);
-            renderMarkdown(contentDiv, content);
+            
+            if (images && images.length > 0) {
+                images.forEach(img => {
+                    const imgEl = document.createElement('img');
+                    imgEl.src = img;
+                    imgEl.className = 'message-image';
+                    contentDiv.appendChild(imgEl);
+                });
+                
+                // Add spacing if text follows
+                if (content) {
+                    const spacer = document.createElement('div');
+                    spacer.style.height = '10px';
+                    contentDiv.appendChild(spacer);
+                }
+            }
+
+            if (content) {
+                const textSpan = document.createElement('div');
+                contentDiv.setAttribute('data-raw', content);
+                renderMarkdown(textSpan, content);
+                contentDiv.appendChild(textSpan);
+            }
             
             chatContainer.appendChild(msgDiv);
         }
