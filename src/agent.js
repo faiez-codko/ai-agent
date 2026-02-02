@@ -4,6 +4,7 @@ import { runCommand } from './tools/shell.js';
 import { tools as toolImplementations, toolDefinitions } from './tools/index.js';
 import { loadPersona } from './personas/index.js';
 import { loadChatHistory, saveChatHistory } from './chatStorage.js';
+import { summarizeMemory } from './memory/summary.js';
 import { sendMessage as sendTelegramMessage } from './tools/telegram.js';
 import chalk from 'chalk';
 import path from 'path';
@@ -30,7 +31,6 @@ export class Agent {
     // Tools will be filtered in init()
     this.toolsDefinition = []; 
     this.tools = {};
-    this._hasSummary = false;
   }
 
   async init() {
@@ -107,7 +107,9 @@ For any complex task (multi-step, research, or development), you MUST use the "3
 
   async chat(userMessage, confirmCallback = null, onUpdate = null) {
     this.memory.push({ role: 'user', content: userMessage });
-    await this._maybeSummarizeHistory();
+    
+    // Check and summarize memory if needed
+    await summarizeMemory(this);
     
     let loopCount = 0;
     const MAX_LOOPS = 50;

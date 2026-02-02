@@ -7,6 +7,7 @@ import { schedulerToolDefinitions, schedulerTools } from './scheduler.js';
 import { webUiToolDefinitions, webUiTools } from './web_ui.js';
 import { smsToolDefinitions, smsTools } from './sms.js';
 import { visionToolDefinitions, visionTools } from './vision.js';
+import { desktopToolDefinitions, desktopTools } from './desktop.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -218,7 +219,8 @@ export const toolDefinitions = [
   ...schedulerToolDefinitions,
   ...webUiToolDefinitions,
   ...smsToolDefinitions,
-  ...visionToolDefinitions
+  ...visionToolDefinitions,
+  ...desktopToolDefinitions
 ];
 
 export const tools = {
@@ -228,9 +230,33 @@ export const tools = {
   ...webUiTools,
   ...smsTools,
   ...visionTools,
+  ...desktopTools,
   delegate_task,
   read_file: async ({ path: filePath }, { agent }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);
+    
+    // Check file extension for images/binary
+    const ext = path.extname(fullPath).toLowerCase();
+    const binaryExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp', '.pdf', '.zip', '.exe', '.bin'];
+    if (binaryExts.includes(ext)) {
+        return `Error: File ${path.basename(fullPath)} appears to be a binary or image file. Reading it as text will fail. Use 'analyze_image' for images or other specialized tools.`;
+    }
+
+    // Check file size (limit to 100KB for text to be safe, though context window is larger, we want to avoid massive logs)
+    try {
+        const stats = await fs.stat(fullPath);
+        if (stats.size > 100 * 1024) {
+             // Read only first 20KB
+             const handle = await fs.open(fullPath, 'r');
+             const buffer = Buffer.alloc(20000);
+             const { bytesRead } = await handle.read(buffer, 0, 20000, 0);
+             await handle.close();
+             return `Warning: File is large (${(stats.size/1024).toFixed(2)}KB). Showing first 20KB:\n\n${buffer.toString('utf8', 0, bytesRead)}\n\n... (truncated)`;
+        }
+    } catch (e) {
+        // Ignore stat errors, readFile will catch them
+    }
+
     return await readFile(fullPath);
   },
   write_file: async ({ path: filePath, content }, { agent, confirmCallback }) => {
