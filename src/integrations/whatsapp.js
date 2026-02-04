@@ -1,4 +1,4 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, jidNormalizedUser } from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, jidNormalizedUser, downloadMediaMessage } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
 import path from 'path';
 import fs from 'fs';
@@ -77,6 +77,12 @@ STRICT EXECUTION RULES:
     const sentMsgIds = new Set();
     const meId = jidNormalizedUser(sock.user.id);
     
+    // Ensure temp media dir exists
+    const MEDIA_DIR = path.join(process.cwd(), '.media_temp');
+    if (!fs.existsSync(MEDIA_DIR)) {
+        fs.mkdirSync(MEDIA_DIR, { recursive: true });
+    }
+
     console.log(chalk.blue('Agent initialized and listening for WhatsApp messages...'));
     console.log(chalk.gray(`My JID: ${meId}`));
 
@@ -94,9 +100,38 @@ STRICT EXECUTION RULES:
             return;
         }
 
-        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+        const imageMessage = msg.message.imageMessage;
+        let text = msg.message.conversation || msg.message.extendedTextMessage?.text || imageMessage?.caption || "";
         
-        if (!text) return;
+        let mediaPath = null;
+        if (imageMessage) {
+            try {
+                // Download image
+                const buffer = await downloadMediaMessage(
+                    msg,
+                    'buffer',
+                    { },
+                    { 
+                        logger: console,
+                        reuploadRequest: sock.updateMediaMessage
+                    }
+                );
+                
+                const ext = imageMessage.mimetype?.includes('png') ? 'png' : 'jpg';
+                const filename = `${msgId}.${ext}`;
+                mediaPath = path.join(MEDIA_DIR, filename);
+                fs.writeFileSync(mediaPath, buffer);
+                
+                // If no text, provide default prompt
+                if (!text) text = "Analyze this image.";
+                
+                console.log(chalk.gray(`Received image from ${remoteJid}, saved to ${mediaPath}`));
+            } catch (err) {
+                console.error("Failed to download media:", err);
+            }
+        }
+
+        if (!text && !mediaPath) return;
 
         // 1. Command Handler
         if (text.startsWith('/')) {
@@ -113,18 +148,25 @@ STRICT EXECUTION RULES:
         // - Trigger if explicitly mentioned (@ai)
         // - Trigger if it's a "Self Chat" (Note to Self)
         const isSelfChat = remoteJid === meId;
-        const isTriggered = text.toLowerCase().includes('@ai') || isSelfChat;
+        const isTriggered = text.toLowerCase().includes('@ai') || isSelfChat || !!mediaPath;
 
         if (!isTriggered) {
+            // Cleanup media if not triggered
+            if (mediaPath && fs.existsSync(mediaPath)) fs.unlinkSync(mediaPath);
             return;
         }
 
         console.log(chalk.gray(`Triggered by ${isFromMe ? 'ME' : remoteJid}: ${text}`));
 
         // Clean the prompt (remove @ai if present)
-        const prompt = text.replace(/@ai/gi, '').trim();
+        let prompt = text.replace(/@ai/gi, '').trim();
 
-        if (!prompt) return; // Ignore empty prompts after removing tag
+        if (!prompt && !mediaPath) return; // Ignore empty prompts after removing tag
+
+        // Attach image info to prompt if present
+        if (mediaPath) {
+            prompt = `[System: User attached an image at ${mediaPath}. Use the 'analyze_image' tool to see it.]\n${prompt}`;
+        }
 
         // Send "typing..." status
         await sock.sendPresenceUpdate('composing', remoteJid);
@@ -168,6 +210,11 @@ STRICT EXECUTION RULES:
                 }
             }
             console.log(chalk.gray(`Sent to ${remoteJid}: ${response}`));
+
+            // Cleanup media file after processing
+            if (mediaPath && fs.existsSync(mediaPath)) {
+                fs.unlinkSync(mediaPath);
+            }
         } catch (error) {
             console.error('Error processing message:', error);
             await sock.sendMessage(remoteJid, { text: `Error: ${error.message}` });
