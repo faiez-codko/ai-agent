@@ -1,7 +1,8 @@
 import { Telegraf } from 'telegraf';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import { Agent } from '../agent.js';
+import { AgentManager } from '../agentManager.js';
+import { IntegrationCommandHandler } from './commandHandler.js';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -106,8 +107,15 @@ STRICT EXECUTION RULES:
 4. IMMEDIATELY delete the script file using \`delete_file\` after execution.
 5. Do not leave any files in the script directory.`;
 
-    const agent = new Agent({ context });
-    await agent.init();
+    const manager = new AgentManager();
+    await manager.init();
+
+    // Ensure at least one agent exists
+    if (manager.agents.size === 0) {
+        await manager.createAgent('default', 'primary');
+    }
+
+    const commandHandler = new IntegrationCommandHandler(manager);
     
     console.log(chalk.blue('Agent initialized.'));
 
@@ -124,6 +132,17 @@ STRICT EXECUTION RULES:
         if (!ctx.message.text) return;
 
         const text = ctx.message.text;
+
+        // 1. Command Handler
+        if (text.startsWith('/')) {
+             console.log(chalk.gray(`Command from ${ctx.from.first_name}: ${text}`));
+             const result = await commandHandler.handle(text);
+             if (result) {
+                 await ctx.reply(result);
+                 return;
+             }
+        }
+        
         const botUsername = ctx.botInfo.username;
         const isPrivate = ctx.chat.type === 'private';
         
@@ -150,6 +169,20 @@ STRICT EXECUTION RULES:
             console.log(chalk.gray(`Received from ${ctx.from.first_name} (${ctx.chat.type}): ${prompt}`));
 
             try {
+                let agent = manager.getActiveAgent();
+                if (!agent) {
+                     agent = await manager.createAgent('default', 'primary');
+                     manager.setActiveAgent(agent.id);
+                }
+
+                // Inject context if needed
+                const systemMsg = agent.memory.find(m => m.role === 'system');
+                if (systemMsg && !systemMsg.content.includes('STRICT EXECUTION RULES')) {
+                    systemMsg.content += `\n\n${context}`;
+                } else if (!systemMsg) {
+                     agent.memory.unshift({ role: 'system', content: `You are ${agent.name}.\n\n${context}` });
+                }
+
                 const response = await agent.chat(prompt);
                 await ctx.reply(response);
                 console.log(chalk.gray(`Sent response.`));

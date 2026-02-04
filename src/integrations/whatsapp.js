@@ -4,7 +4,8 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import chalk from 'chalk';
-import { Agent } from '../agent.js';
+import { AgentManager } from '../agentManager.js';
+import { IntegrationCommandHandler } from './commandHandler.js';
 
 const AUTH_DIR = path.join(os.homedir(), '.auth_info_baileys');
 
@@ -60,8 +61,15 @@ STRICT EXECUTION RULES:
 4. IMMEDIATELY delete the script file using \`delete_file\` after execution.
 5. Do not leave any files in the script directory.`;
 
-    const agent = new Agent({ context });
-    await agent.init();
+    const manager = new AgentManager();
+    await manager.init();
+
+    // Ensure at least one agent exists
+    if (manager.agents.size === 0) {
+        await manager.createAgent('default', 'primary');
+    }
+
+    const commandHandler = new IntegrationCommandHandler(manager);
     
     // Keep track of messages sent by the bot to avoid loops
     const sentMsgIds = new Set();
@@ -84,16 +92,22 @@ STRICT EXECUTION RULES:
             return;
         }
 
-        // Logic:
-        // 1. Check if message contains '@ai' (case insensitive)
-        // 2. If yes, process and reply (regardless of who sent it)
-        // 3. Loop prevention is handled by sentMsgIds AND the fact that bot response likely won't contain '@ai'
-        
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
         
         if (!text) return;
 
-        // Trigger Check: Must contain "@ai"
+        // 1. Command Handler
+        if (text.startsWith('/')) {
+             console.log(chalk.gray(`Command from ${remoteJid}: ${text}`));
+             const result = await commandHandler.handle(text);
+             if (result) {
+                 const sent = await sock.sendMessage(remoteJid, { text: result });
+                 if (sent?.key?.id) sentMsgIds.add(sent.key.id);
+                 return;
+             }
+        }
+
+        // 2. Trigger Check: Must contain "@ai"
         if (!text.toLowerCase().includes('@ai')) {
             return;
         }
@@ -109,6 +123,21 @@ STRICT EXECUTION RULES:
         await sock.sendPresenceUpdate('composing', remoteJid);
 
         try {
+            let agent = manager.getActiveAgent();
+            if (!agent) {
+                 agent = await manager.createAgent('default', 'primary');
+                 manager.setActiveAgent(agent.id);
+            }
+
+            // Inject context if needed
+            const systemMsg = agent.memory.find(m => m.role === 'system');
+            if (systemMsg && !systemMsg.content.includes('STRICT EXECUTION RULES')) {
+                systemMsg.content += `\n\n${context}`;
+            } else if (!systemMsg) {
+                 // Should not happen if agent.init() was called, but just in case
+                 agent.memory.unshift({ role: 'system', content: `You are ${agent.name}.\n\n${context}` });
+            }
+
             const response = await agent.chat(prompt);
             
             // Stop "typing..."
@@ -127,6 +156,7 @@ STRICT EXECUTION RULES:
             console.log(chalk.gray(`Sent to ${remoteJid}: ${response}`));
         } catch (error) {
             console.error('Error processing message:', error);
+            await sock.sendMessage(remoteJid, { text: `Error: ${error.message}` });
         }
     });
 }

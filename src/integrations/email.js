@@ -3,7 +3,8 @@ import imaps from 'imap-simple';
 import { simpleParser } from 'mailparser';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import { Agent } from '../agent.js';
+import { AgentManager } from '../agentManager.js';
+import { IntegrationCommandHandler } from './commandHandler.js';
 import { loadConfig, saveConfig } from '../config.js';
 
 export async function setupEmail() {
@@ -91,6 +92,27 @@ async function startEmailListener(config) {
         }
     });
 
+    // Define Strict Rules for Email
+    const context = `CONTEXT AWARENESS:
+You are communicating via Email. Your responses should be professional and well-structured.
+
+STRICT EXECUTION RULES:
+1. When you need to execute code/scripts, you MUST save them to the script directory using \`write_file\`.
+2. Execute the script using \`run_command\`.
+3. Read the output.
+4. IMMEDIATELY delete the script file using \`delete_file\` after execution.
+5. Do not leave any files in the script directory.`;
+
+    const manager = new AgentManager();
+    await manager.init();
+
+    // Ensure at least one agent exists
+    if (manager.agents.size === 0) {
+        await manager.createAgent('default', 'primary');
+    }
+
+    const commandHandler = new IntegrationCommandHandler(manager);
+
     try {
         const connection = await imaps.connect(imapConfig);
         console.log(chalk.green('Connected to IMAP successfully!'));
@@ -119,37 +141,51 @@ async function startEmailListener(config) {
                     const from = simpleMail.from.text;
                     const subject = simpleMail.subject;
                     const text = simpleMail.text;
+                    const textContent = (text || "").trim();
 
-                    // Filter: Must contain "@ai" or specific trigger
-                    if (subject.toLowerCase().includes('@ai') || (text && text.toLowerCase().includes('@ai'))) {
+                    // 1. Command Check
+                    if (textContent.startsWith('/')) {
+                        console.log(chalk.blue(`Command email from ${from}: ${textContent}`));
+                         await connection.addFlags(id, '\\Seen');
+                         
+                         const result = await commandHandler.handle(textContent);
+                         if (result) {
+                            await transporter.sendMail({
+                                from: config.user,
+                                to: simpleMail.from.value[0].address,
+                                subject: `Re: ${subject}`,
+                                text: result
+                            });
+                            console.log(chalk.green(`Command result sent to ${from}`));
+                         }
+                         continue;
+                    }
+
+                    // 2. Trigger Check: Must contain "@ai" or specific trigger
+                    if (subject.toLowerCase().includes('@ai') || textContent.toLowerCase().includes('@ai')) {
                         console.log(chalk.blue(`Processing email from ${from}: ${subject}`));
                         
                         // Mark as seen
                         await connection.addFlags(id, '\\Seen');
 
-                        // Generate Response
-                        // Define Strict Rules for Email
-                        const context = `CONTEXT AWARENESS:
-You are communicating via Email. Your responses should be professional and well-structured.
+                        let agent = manager.getActiveAgent();
+                        if (!agent) {
+                             agent = await manager.createAgent('default', 'primary');
+                             manager.setActiveAgent(agent.id);
+                        }
 
-STRICT EXECUTION RULES:
-1. When you need to execute code/scripts, you MUST save them to the script directory using \`write_file\`.
-2. Execute the script using \`run_command\`.
-3. Read the output.
-4. IMMEDIATELY delete the script file using \`delete_file\` after execution.
-5. Do not leave any files in the script directory.`;
+                        // Inject context
+                        const systemMsg = agent.memory.find(m => m.role === 'system');
+                        if (systemMsg && !systemMsg.content.includes('STRICT EXECUTION RULES')) {
+                            systemMsg.content += `\n\n${context}`;
+                        } else if (!systemMsg) {
+                             agent.memory.unshift({ role: 'system', content: `You are ${agent.name}.\n\n${context}` });
+                        }
 
-                        const agent = new Agent({ context });
-                        await agent.init();
                         const prompt = `${subject}\n\n${text}`.replace(/@ai/gi, '').trim();
                         
                         console.log(chalk.gray('Thinking...'));
-                        const response = await agent.run(prompt); // Assuming agent.run returns text or we capture output
-
-                        // Since agent.run usually executes tools, we might want to ask it to "Draft a reply"
-                        // But for now, let's assume we get a text response or we wrap the agent interaction.
-                        // Actually, agent.run might not return the final text if it uses tools.
-                        // Let's use a simpler approach: Ask agent to generate a response.
+                        const response = await agent.chat(prompt);
                         
                         // Send Reply
                         await transporter.sendMail({
