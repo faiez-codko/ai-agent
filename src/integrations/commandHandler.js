@@ -1,6 +1,6 @@
-
 import { AgentManager } from '../agentManager.js';
 import { clearChatHistory } from '../chatStorage.js';
+import { savePersona, loadPersona } from '../personas/index.js';
 
 export class IntegrationCommandHandler {
     constructor(agentManager) {
@@ -23,6 +23,8 @@ export class IntegrationCommandHandler {
                 return this.handleList();
             case '/create':
                 return this.handleCreate(args);
+            case '/create-persona':
+                return this.handleCreatePersona(args);
             case '/help':
                 return this.handleHelp();
             default:
@@ -35,6 +37,7 @@ export class IntegrationCommandHandler {
 - /agent: Show details of the currently active agent.
 - /list: List all available agents and their IDs.
 - /create <persona> [name]: Create a new agent (e.g., /create developer my-dev).
+- /create-persona <id> <system_prompt>: Define a new persona behavior (e.g., /create-persona poetic "You speak in rhymes").
 - /switch-agent <name_or_id>: Switch the active agent session.
 - /clear: Clear the chat history and memory of the active agent.
 - /help: Show this help message.
@@ -91,6 +94,34 @@ To chat with the agent, simply mention @ai or reply to its messages.`;
             return `Created and switched to agent: ${newAgent.name}`;
         } catch (e) {
             return `Failed to create agent: ${e.message}`;
+        }
+    }
+
+    async handleCreatePersona(args) {
+        if (args.length < 3) {
+            return "Usage: /create-persona <id> <system_prompt>\nExample: /create-persona poetic You speak in rhymes.";
+        }
+        
+        const id = args[1];
+        // Join the rest of the arguments to form the system prompt
+        const systemPrompt = args.slice(2).join(' ');
+        
+        try {
+            // Load default persona to copy allowed tools
+            const defaultPersona = await loadPersona('default');
+            
+            const newPersona = {
+                id,
+                name: id, // Use ID as name for simplicity
+                systemPrompt,
+                allowedTools: defaultPersona.allowedTools || [],
+                description: 'Created via chat interface'
+            };
+            
+            await savePersona(newPersona);
+            return `Persona '${id}' created successfully!\nYou can now use it with: /create ${id} [agent_name]`;
+        } catch (e) {
+            return `Failed to create persona: ${e.message}`;
         }
     }
 }
