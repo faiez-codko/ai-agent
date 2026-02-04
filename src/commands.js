@@ -23,62 +23,146 @@ export async function web() {
 }
 
 export async function setup() {
-  const config = await loadConfig();
+  let config = await loadConfig();
   
-  const answers = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'provider',
-      message: 'Select AI Provider:',
-      choices: ['openai', 'gemini', 'compatible'],
-      default: config.provider,
-    },
-    {
-      type: 'input',
-      name: 'model',
-      message: 'Enter Model Name (optional):',
-      default: (answers) => {
-        if (answers.provider === 'openai') return 'gpt-4o';
-        if (answers.provider === 'gemini') return 'gemini-1.5-flash';
-        return 'gpt-3.5-turbo';
-      },
-    },
-    {
-      type: 'password',
-      name: 'apiKey',
-      message: 'Enter API Key:',
-      mask: '*',
-    },
-    {
-      type: 'input',
-      name: 'baseUrl',
-      message: 'Enter Base URL:',
-      default: 'http://localhost:8080/v1',
-      when: (answers) => answers.provider === 'compatible',
+  console.log(chalk.blue.bold('\n--- AI Agent Setup ---\n'));
+
+  while (true) {
+    const { action } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'action',
+        message: 'What would you like to configure?',
+        choices: [
+          { name: '1. AI Provider', value: 'ai' },
+          { name: '2. SMS Gateway (sms-gate.app)', value: 'sms' },
+          { name: '3. Telegram Integration', value: 'telegram' },
+          { name: '4. GitHub Integration', value: 'github' },
+          new inquirer.Separator(),
+          { name: 'Exit', value: 'exit' }
+        ]
+      }
+    ]);
+
+    if (action === 'exit') {
+      console.log(chalk.green('Setup completed.'));
+      break;
     }
-  ]);
 
-  const newConfig = {
-    ...config,
-    provider: answers.provider,
-    model: answers.model,
-  };
+    if (action === 'ai') {
+      const providerAnswers = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'provider',
+          message: 'Select AI Provider:',
+          choices: ['openai', 'gemini', 'compatible'],
+          default: config.provider,
+        },
+        {
+          type: 'input',
+          name: 'model',
+          message: 'Enter Model Name (optional):',
+          default: (answers) => {
+            if (answers.provider === 'openai') return 'gpt-4o';
+            if (answers.provider === 'gemini') return 'gemini-1.5-flash';
+            return 'gpt-3.5-turbo';
+          },
+        },
+        {
+          type: 'password',
+          name: 'apiKey',
+          message: 'Enter API Key:',
+          mask: '*',
+        },
+        {
+          type: 'input',
+          name: 'baseUrl',
+          message: 'Enter Base URL:',
+          default: 'http://localhost:8080/v1',
+          when: (answers) => answers.provider === 'compatible',
+        }
+      ]);
 
-  // Save keys specifically for the provider
-  if (answers.provider === 'openai') {
-      newConfig.openai_api_key = answers.apiKey;
-  } else if (answers.provider === 'gemini') {
-      newConfig.gemini_api_key = answers.apiKey;
-  } else if (answers.provider === 'compatible') {
-      newConfig.compatible_api_key = answers.apiKey;
-      newConfig.compatible_base_url = answers.baseUrl;
+      config.provider = providerAnswers.provider;
+      config.model = providerAnswers.model;
+      
+      if (providerAnswers.provider === 'openai') {
+          config.openai_api_key = providerAnswers.apiKey;
+      } else if (providerAnswers.provider === 'gemini') {
+          config.gemini_api_key = providerAnswers.apiKey;
+      } else if (providerAnswers.provider === 'compatible') {
+          config.compatible_api_key = providerAnswers.apiKey;
+          config.compatible_base_url = providerAnswers.baseUrl;
+      }
+      
+      await saveConfig(config);
+      console.log(chalk.green('AI Provider configuration saved!\n'));
+
+    } else if (action === 'sms') {
+      const smsAnswers = await inquirer.prompt([
+        {
+            type: 'input',
+            name: 'sms_username',
+            message: 'Enter SMS Gateway Username (leave empty to skip):',
+            default: config.sms_username || '',
+        },
+        {
+            type: 'password',
+            name: 'sms_password',
+            message: 'Enter SMS Gateway Password (leave empty to skip):',
+            mask: '*',
+            default: config.sms_password || '',
+            when: (answers) => answers.sms_username
+        },
+        {
+            type: 'input',
+            name: 'sms_device_id',
+            message: 'Enter Default Device ID (optional):',
+            default: config.sms_device_id || '',
+            when: (answers) => answers.sms_username
+        }
+      ]);
+
+      if (smsAnswers.sms_username !== undefined) config.sms_username = smsAnswers.sms_username;
+      if (smsAnswers.sms_password !== undefined) config.sms_password = smsAnswers.sms_password;
+      if (smsAnswers.sms_device_id !== undefined) config.sms_device_id = smsAnswers.sms_device_id;
+      
+      await saveConfig(config);
+      console.log(chalk.green('SMS Gateway configuration saved!\n'));
+
+    } else if (action === 'telegram') {
+      const telegramAnswers = await inquirer.prompt([
+        {
+            type: 'password',
+            name: 'telegram_bot_token',
+            message: 'Enter Telegram Bot Token (leave empty to skip):',
+            mask: '*',
+            default: config.telegram_bot_token || '',
+        }
+      ]);
+
+      if (telegramAnswers.telegram_bot_token !== undefined) config.telegram_bot_token = telegramAnswers.telegram_bot_token;
+      
+      await saveConfig(config);
+      console.log(chalk.green('Telegram configuration saved!\n'));
+
+    } else if (action === 'github') {
+      const githubAnswers = await inquirer.prompt([
+        {
+            type: 'password',
+            name: 'github_token',
+            message: 'Enter GitHub Token (leave empty to skip):',
+            mask: '*',
+            default: config.github_token || '',
+        }
+      ]);
+
+      if (githubAnswers.github_token !== undefined) config.github_token = githubAnswers.github_token;
+      
+      await saveConfig(config);
+      console.log(chalk.green('GitHub configuration saved!\n'));
+    }
   }
-
-  await saveConfig(newConfig);
-
-  console.log(chalk.green('Configuration saved!'));
-  console.log(chalk.yellow('Make sure to set your API keys in environment variables (.env) or your shell.'));
-  console.log(`OPENAI_API_KEY, GEMINI_API_KEY, or COMPATIBLE_API_KEY`);
 }
 
 export async function read(filePath, query, agentInstance = null) {

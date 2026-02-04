@@ -1,4 +1,6 @@
 
+import { loadConfig } from '../config.js';
+
 export class SMSGateClient {
     constructor(username, password) {
         this.username = username;
@@ -7,7 +9,7 @@ export class SMSGateClient {
     }
 
     auth() {
-        return Buffer.from(`${this.username}:${this.password}`).toString('base64');
+        return btoa(`${this.username}:${this.password}`)
     }
 
     async send(message, phoneNumbers, deviceId) {
@@ -61,11 +63,19 @@ export class SMSGateClient {
 }
 
 // Helper to get client from agent
-function getClient(agent) {
+async function getClient(agent) {
     if (agent.smsClient) {
         return agent.smsClient;
     }
-    throw new Error("SMS Gate client not configured. Use sms_configure first.");
+    
+    // Try to auto-configure from config
+    const config = await loadConfig();
+    if (config.sms_username && config.sms_password) {
+        agent.smsClient = new SMSGateClient(config.sms_username, config.sms_password);
+        return agent.smsClient;
+    }
+
+    throw new Error("SMS Gate client not configured. Use sms_configure first or set credentials in setup.");
 }
 
 export const smsToolDefinitions = [
@@ -135,19 +145,24 @@ export const smsTools = {
         return "SMS Gate client configured successfully.";
     },
     sms_send: async ({ message, phoneNumbers, deviceId }, { agent }) => {
-        const client = getClient(agent);
+        const client = await getClient(agent);
+        // Use default device ID from config if not provided
+        if (!deviceId) {
+            const config = await loadConfig();
+            if (config.sms_device_id) deviceId = config.sms_device_id;
+        }
         return await client.send(message, phoneNumbers, deviceId);
     },
     sms_devices: async ({}, { agent }) => {
-        const client = getClient(agent);
+        const client = await getClient(agent);
         return await client.getDevices();
     },
     sms_status: async ({ messageId }, { agent }) => {
-        const client = getClient(agent);
+        const client = await getClient(agent);
         return await client.getMessageStatus(messageId);
     },
     sms_logs: async ({}, { agent }) => {
-        const client = getClient(agent);
+        const client = await getClient(agent);
         return await client.getLogs();
     }
 };

@@ -8,6 +8,7 @@ import { webUiToolDefinitions, webUiTools } from './web_ui.js';
 import { smsToolDefinitions, smsTools } from './sms.js';
 import { visionToolDefinitions, visionTools } from './vision.js';
 import { desktopToolDefinitions, desktopTools } from './desktop.js';
+import { githubToolDefinitions, githubTools } from './github.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -220,7 +221,8 @@ export const toolDefinitions = [
   ...webUiToolDefinitions,
   ...smsToolDefinitions,
   ...visionToolDefinitions,
-  ...desktopToolDefinitions
+  ...desktopToolDefinitions,
+  ...githubToolDefinitions
 ];
 
 export const tools = {
@@ -231,6 +233,7 @@ export const tools = {
   ...smsTools,
   ...visionTools,
   ...desktopTools,
+  ...githubTools,
   delegate_task,
   read_file: async ({ path: filePath }, { agent }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);

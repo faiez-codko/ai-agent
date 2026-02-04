@@ -62,6 +62,9 @@ A powerful, multi-personality AI agent for your terminal. This tool allows you t
     # For Compatible (e.g. LocalAI, Groq, Ollama)
     OPENAI_BASE_URL="http://localhost:8080/v1"
     COMPATIBLE_API_KEY="sk-..."
+
+    # For GitHub Tools (Optional)
+    GITHUB_TOKEN="ghp_..."
     ```
 
 ## Usage
@@ -108,6 +111,15 @@ Connect your AI agent to external messaging platforms.
 **Commands:**
 *   `ai-agent integration list` - List available integrations.
 *   `ai-agent integration setup <name>` - Setup and start an integration.
+
+**Slash Commands (Available in WhatsApp, Telegram, Email):**
+*   `/help` - Show available commands.
+*   `/agent` - Show details of current agent.
+*   `/list` - List all active agents.
+*   `/switch-agent <name_or_id>` - Switch to a different agent.
+*   `/create <persona> [name]` - Create a new agent (e.g., `/create developer my-dev`).
+*   `/create-persona <id> <prompt>` - Define a new persona (e.g., `/create-persona poetic "Speak in rhymes"`).
+*   `/clear` - Clear chat history and memory.
 
 **Supported Platforms:**
 

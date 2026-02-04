@@ -36,3 +36,12 @@ export async function getApiKey(provider) {
 
     return null;
 }
+
+export async function getGitHubToken() {
+    // 1. Check Env Vars
+    if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
+
+    // 2. Check Config File
+    const config = await loadConfig();
+    return config.github_token;
+}
