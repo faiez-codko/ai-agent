@@ -34,6 +34,12 @@
   "bin": {
     "ai-agent": "index.js"
   },
+  "preferGlobal": true,
+  "files": [
+    "index.js",
+    "src",
+    "readme.md"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
