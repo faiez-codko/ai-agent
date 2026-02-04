@@ -291,12 +291,57 @@ For any complex task (multi-step, research, or development), you MUST use the "3
     const nonSystem = this.memory.filter(m => m.role !== 'system');
     let recent = nonSystem.slice(-maxMessages);
     
-    // Ensure context doesn't start with a 'tool' message (which would be orphaned)
+    // 1. Ensure context doesn't start with a 'tool' message (which would be orphaned)
     while (recent.length > 0 && recent[0].role === 'tool') {
         recent.shift();
     }
     
-    let context = [...systemMessages, ...recent];
+    // 2. SANITIZATION: Ensure every assistant message with tool_calls has matching tool messages
+    // If not, we must remove the assistant message to prevent OpenAI 400 errors.
+    const sanitizedRecent = [];
+    let i = 0;
+    while (i < recent.length) {
+        const msg = recent[i];
+        if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+            // Look ahead for tool messages
+            const expectedIds = new Set(msg.tool_calls.map(tc => tc.id));
+            const foundIds = new Set();
+            let j = i + 1;
+            while (j < recent.length && recent[j].role === 'tool') {
+                foundIds.add(recent[j].tool_call_id);
+                j++;
+            }
+            
+            // Check if we have all responses
+            const missingIds = [...expectedIds].filter(id => !foundIds.has(id));
+            
+            if (missingIds.length === 0) {
+                // All good, keep assistant and its tool responses
+                sanitizedRecent.push(msg);
+                // The tool messages will be added in the next iterations of the outer loop
+                // (Wait, no, we need to skip them in outer loop if we processed them here? 
+                //  Actually simpler: just validate here, and if valid, push msg. 
+                //  The tool messages are just normal messages in the list, they will be processed when i increments.)
+                // BUT: if we remove the assistant message, we MUST remove the tool messages too.
+                i++; 
+            } else {
+                // BROKEN CHAIN! Missing tool responses.
+                console.log(chalk.yellow(`⚠️  Removing broken tool call chain (Assistant msg ${i}). Missing IDs: ${missingIds.join(', ')}`));
+                // Skip this assistant message AND any partial tool responses following it
+                let k = i + 1;
+                while (k < recent.length && recent[k].role === 'tool') {
+                    k++;
+                }
+                i = k; // Jump past the broken chain
+            }
+        } else {
+            // Normal message
+            sanitizedRecent.push(msg);
+            i++;
+        }
+    }
+    
+    let context = [...systemMessages, ...sanitizedRecent];
 
     if (truncateLargeOutputs) {
         // Create new objects to avoid mutating memory
