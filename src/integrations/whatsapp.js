@@ -110,9 +110,10 @@ STRICT EXECUTION RULES:
         }
 
         // 2. Trigger Check: 
-        // - If from ME: Always trigger (unless it's a command, handled above)
-        // - If from OTHERS: Must contain "@ai"
-        const isTriggered = isFromMe || text.toLowerCase().includes('@ai');
+        // - Trigger if explicitly mentioned (@ai)
+        // - Trigger if it's a "Self Chat" (Note to Self)
+        const isSelfChat = remoteJid === meId;
+        const isTriggered = text.toLowerCase().includes('@ai') || isSelfChat;
 
         if (!isTriggered) {
             return;
@@ -129,10 +130,17 @@ STRICT EXECUTION RULES:
         await sock.sendPresenceUpdate('composing', remoteJid);
 
         try {
-            let agent = manager.getActiveAgent();
+            // Get or Create Agent for this specific user (JID)
+            // Sanitize JID for use as an ID (remove special chars)
+            const safeJid = remoteJid.replace(/[^a-zA-Z0-9]/g, '_');
+            const agentId = `wa_${safeJid}`;
+            
+            let agent = manager.agents.get(agentId);
+            
             if (!agent) {
-                 agent = await manager.createAgent('default', 'primary');
-                 manager.setActiveAgent(agent.id);
+                console.log(chalk.blue(`Creating new agent session for WhatsApp user: ${remoteJid}`));
+                agent = await manager.createAgent('default', agentId);
+                // We don't set this as the *global* active agent to avoid interfering with CLI
             }
 
             // Inject context if needed
