@@ -6,6 +6,7 @@ import os from 'os';
 import chalk from 'chalk';
 import { AgentManager } from '../agentManager.js';
 import { IntegrationCommandHandler } from './commandHandler.js';
+import { setActiveSocket } from './whatsapp_client.js';
 
 const AUTH_DIR = path.join(os.homedir(), '.auth_info_baileys');
 
@@ -22,6 +23,7 @@ export async function setupWhatsApp() {
         auth: state,
         browser: ["AI Agent", "Chrome", "1.0.0"]
     });
+    setActiveSocket(sock);
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;

@@ -11,6 +11,7 @@ import { desktopToolDefinitions, desktopTools } from './desktop.js';
 import { githubToolDefinitions, githubTools } from './github.js';
 import { ghToolDefinitions, ghTools } from './gh.js';
 import { emailToolDefinitions, emailTools } from './email.js';
+import { whatsappToolDefinitions, whatsappTools } from './whatsapp.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -226,11 +227,13 @@ export const toolDefinitions = [
   ...desktopToolDefinitions,
   ...githubToolDefinitions,
   ...ghToolDefinitions,
-  ...emailToolDefinitions
+  ...emailToolDefinitions,
+  ...whatsappToolDefinitions
 ];
 
 export const tools = {
   ...emailTools,
+  ...whatsappTools,
   ...browser_tools,
   ...db_tools,
   ...schedulerTools,
