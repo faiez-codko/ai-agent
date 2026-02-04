@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import { loadConfig, saveConfig } from '../config.js';
+import { generateAudio } from '../tools/audio.js';
 
 // Load env vars
 dotenv.config();
@@ -186,6 +187,21 @@ STRICT EXECUTION RULES:
                 const response = await agent.chat(prompt);
                 await ctx.reply(response);
                 console.log(chalk.gray(`Sent response.`));
+
+                // Audio Logic
+                try {
+                    const config = await loadConfig();
+                    if (config.audio_enabled) {
+                        const audioPath = await generateAudio(response, config.audio_voice);
+                        if (audioPath) {
+                            await ctx.replyWithAudio({ source: audioPath });
+                             // Cleanup audio file
+                             if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
+                        }
+                    }
+                } catch (e) {
+                     console.error('Audio send failed', e);
+                }
             } catch (error) {
                 console.error('Error processing message:', error);
                 await ctx.reply('Sorry, I encountered an error.');

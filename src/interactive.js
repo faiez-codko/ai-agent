@@ -3,6 +3,8 @@ import chalk from 'chalk';
 import { setup, read, update, fix, run } from './commands.js';
 import { clearChatHistory } from './chatStorage.js';
 import { AgentManager } from './agentManager.js';
+import { loadConfig } from './config.js';
+import { generateAudio } from './tools/audio.js';
 import ora from 'ora';
 
 export async function startInteractiveMode() {
@@ -75,6 +77,20 @@ export async function startInteractiveMode() {
         });
         spinner.stop();
         console.log(chalk.green('AI: ') + response);
+
+        // Audio Generation
+        try {
+            const config = await loadConfig();
+            if (config.audio_enabled) {
+                const audioPath = await generateAudio(response, config.audio_voice);
+                if (audioPath) {
+                    console.log(chalk.gray(`Audio response generated: ${audioPath}`));
+                }
+            }
+        } catch (err) {
+            console.error(chalk.yellow('Failed to generate audio response.'));
+        }
+
         console.log('');
       } catch (error) {
         spinner.fail('Chat failed');

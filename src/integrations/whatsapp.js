@@ -6,7 +6,9 @@ import os from 'os';
 import chalk from 'chalk';
 import { AgentManager } from '../agentManager.js';
 import { IntegrationCommandHandler } from './commandHandler.js';
-import { setActiveSocket } from './whatsapp_client.js';
+import { setActiveSocket, sendWhatsAppMedia } from './whatsapp_client.js';
+import { loadConfig } from '../config.js';
+import { generateAudio } from '../tools/audio.js';
 
 const AUTH_DIR = path.join(os.homedir(), '.auth_info_baileys');
 
@@ -210,6 +212,21 @@ STRICT EXECUTION RULES:
                 }
             }
             console.log(chalk.gray(`Sent to ${remoteJid}: ${response}`));
+
+            // Audio Response
+            try {
+                const config = await loadConfig();
+                if (config.audio_enabled) {
+                    const audioPath = await generateAudio(response, config.audio_voice);
+                    if (audioPath) {
+                        await sendWhatsAppMedia(remoteJid, audioPath, '', 'audio');
+                        // Cleanup audio file
+                        if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to send audio response:", err);
+            }
 
             // Cleanup media file after processing
             if (mediaPath && fs.existsSync(mediaPath)) {

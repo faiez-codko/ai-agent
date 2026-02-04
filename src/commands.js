@@ -44,7 +44,8 @@ export async function setup() {
           { name: '3. Telegram Integration', value: '3' },
           { name: '4. GitHub Integration', value: '4' },
           { name: '5. Email Integration (Gmail/SMTP)', value: '5' },
-          { name: 'Exit', value: '6' }
+          { name: '6. Audio Configuration', value: '6' },
+          { name: 'Exit', value: '7' }
         ]
       }
     ]);
@@ -220,6 +221,32 @@ export async function setup() {
         config.email = emailConfig;
         await saveConfig(config);
         console.log(chalk.green('Email configuration saved!\n'));
+    }
+
+    if (action === '6') {
+      const audioAnswers = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'audio_enabled',
+          message: 'Enable Audio Responses (TTS)?',
+          default: config.audio_enabled || false,
+        },
+        {
+          type: 'list',
+          name: 'audio_voice',
+          message: 'Select Voice:',
+          choices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
+          default: config.audio_voice || 'alloy',
+          when: (answers) => answers.audio_enabled,
+        }
+      ]);
+
+      config.audio_enabled = audioAnswers.audio_enabled;
+      if (audioAnswers.audio_enabled) {
+          config.audio_voice = audioAnswers.audio_voice;
+      }
+      await saveConfig(config);
+      console.log(chalk.green('Audio configuration saved!'));
     }
   }
 }
