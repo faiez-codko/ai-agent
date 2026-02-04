@@ -69,6 +69,12 @@ export class Agent {
         }
     }
 
+    // Use a unique sub-directory for this agent's planning files if id is provided
+    // This prevents context collision between different users (WhatsApp, Telegram, etc.)
+    const agentDir = this.id !== 'default' ? `.agent/${this.id}` : '.agent';
+    const taskPlanPath = `${agentDir}/task_plan.md`;
+    const notesPath = `${agentDir}/notes.md`;
+
     let systemPrompt = `You are ${this.name}.
 ${this.persona.systemPrompt}
 
@@ -86,11 +92,13 @@ IMPORTANT:
 
 PLANNING & PERSISTENCE (CRITICAL):
 For any complex task (multi-step, research, or development), you MUST use the "3-File Pattern" to prevent forgetting your goal:
-1. Create \`.agent/task_plan.md\` FIRST. Define the Goal, Phases (with checkboxes), and current Status.
-2. Create \`.agent/notes.md\` for research findings.
-3. READ \`.agent/task_plan.md\` before starting each new step to refresh your context.
-4. UPDATE \`.agent/task_plan.md\` immediately after completing a phase (mark [x], update Status).
-5. Log errors in \`.agent/task_plan.md\` to build knowledge.
+1. Create \`${taskPlanPath}\` FIRST. Define the Goal, Phases (with checkboxes), and current Status.
+2. Create \`${notesPath}\` for research findings.
+3. READ \`${taskPlanPath}\` before starting each new step to refresh your context.
+4. UPDATE \`${taskPlanPath}\` immediately after completing a phase (mark [x], update Status).
+5. Log errors in \`${taskPlanPath}\` to build knowledge.
+
+NOTE: Ensure the directory \`${agentDir}\` exists before writing files.
 `;
 
     // Append Additional Context (e.g. Integration Rules)

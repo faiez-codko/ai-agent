@@ -170,14 +170,24 @@ STRICT EXECUTION RULES:
             console.log(chalk.gray(`Received from ${ctx.from.first_name} (${ctx.chat.type}): ${prompt}`));
 
             try {
-                let agent = manager.getActiveAgent();
+                // Get or Create Agent for this specific user/chat
+                const agentId = `tg_${ctx.chat.id}`;
+                let agent = manager.agents.get(agentId);
+                
                 if (!agent) {
-                     agent = await manager.createAgent('default', 'primary');
-                     manager.setActiveAgent(agent.id);
+                     console.log(chalk.blue(`Creating new agent session for Telegram chat: ${ctx.chat.id}`));
+                     agent = await manager.createAgent('default', agentId);
                 }
 
                 // Inject context if needed
                 const systemMsg = agent.memory.find(m => m.role === 'system');
+
+                // Ensure agent directory exists for this user
+                const agentDir = path.join(process.cwd(), '.agent', agentId);
+                if (!fs.existsSync(agentDir)) {
+                     fs.mkdirSync(agentDir, { recursive: true });
+                }
+
                 if (systemMsg && !systemMsg.content.includes('STRICT EXECUTION RULES')) {
                     systemMsg.content += `\n\n${context}`;
                 } else if (!systemMsg) {

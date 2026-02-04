@@ -189,6 +189,13 @@ STRICT EXECUTION RULES:
 
             // Inject context if needed
             const systemMsg = agent.memory.find(m => m.role === 'system');
+            
+            // Ensure agent directory exists for this user
+            const agentDir = path.join(process.cwd(), '.agent', agentId);
+            if (!fs.existsSync(agentDir)) {
+                 fs.mkdirSync(agentDir, { recursive: true });
+            }
+
             if (systemMsg && !systemMsg.content.includes('STRICT EXECUTION RULES')) {
                 systemMsg.content += `\n\n${context}`;
             } else if (!systemMsg) {
