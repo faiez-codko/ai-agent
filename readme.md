@@ -111,12 +111,6 @@ This will start a local server at `http://localhost:8456` where you can chat wit
 *   **Sessions**: `.agent/sessions.json` (Per-project active agents).
 *   **Config**: `~/.ai-agent-config.json` (Global API keys and preferences).
 
-### Single Command Mode
-Run a quick task without entering the shell:
-
-```bash
-ai-agent "Analyze the package.json file in the current directory"
-```
 
 ### Setup Mode
 Change your AI provider or model settings:
