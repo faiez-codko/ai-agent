@@ -32,7 +32,9 @@ export async function setup() {
     console.log(chalk.grey.bold('2. SMS Gateway (sms-gate.app)'));
     console.log(chalk.grey.bold('3. Telegram Integration'));
     console.log(chalk.grey.bold('4. GitHub Integration'));
-    console.log(chalk.grey.bold('5. Exit'));
+    console.log(chalk.grey.bold('5. Email Integration (Gmail/SMTP)'));
+    console.log(chalk.grey.bold('6. Audio Configuration'));
+    console.log(chalk.grey.bold('7. Exit'));
     const { action } = await inquirer.prompt([
       {
         type: 'list',
@@ -50,7 +52,7 @@ export async function setup() {
       }
     ]);
 
-    if (action === '6') {
+    if (action === '7') {
       console.log(chalk.green('Setup completed.'));
       break;
     }
