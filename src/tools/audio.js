@@ -16,16 +16,41 @@ export async function generateAudio(text, voice = 'alloy') {
     // Clean text (remove emojis, code blocks if necessary, but TTS might handle them)
     // For now, let's just pass it through.
     
-    // Pollinations API: https://text.pollinations.ai/{prompt}?model=openai-audio&voice={voice}
-    const url = `https://text.pollinations.ai/${encodeURIComponent(text)}?model=openai-audio&voice=${voice}`;
+    // New Unified API Endpoint (POST request required for audio)
+    // https://gen.pollinations.ai/v1/chat/completions
+    const url = 'https://gen.pollinations.ai/v1/chat/completions';
     
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'openai-audio',
+                messages: [{ role: 'user', content: text }],
+                modalities: ['text', 'audio'],
+                audio: {
+                    voice: voice,
+                    format: 'mp3'
+                }
+            })
+        });
+
         if (!response.ok) {
-            throw new Error(`Failed to generate audio: ${response.statusText}`);
+            throw new Error(`Failed to generate audio: ${response.status} ${response.statusText}`);
         }
         
-        const buffer = await response.buffer();
+        const data = await response.json();
+        
+        // The API returns base64 encoded audio in choices[0].message.audio.data
+        if (!data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.audio || !data.choices[0].message.audio.data) {
+             throw new Error("Invalid API response format: Missing audio data");
+        }
+
+        const audioBase64 = data.choices[0].message.audio.data;
+        const buffer = Buffer.from(audioBase64, 'base64');
+        
         const filename = `audio-${Date.now()}.mp3`;
         const filePath = path.join(AUDIO_DIR, filename);
         
