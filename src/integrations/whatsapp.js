@@ -49,7 +49,18 @@ export async function setupWhatsApp() {
 }
 
 async function startListening(sock) {
-    const agent = new Agent();
+    // Define Strict Rules for WhatsApp
+    const context = `CONTEXT AWARENESS:
+You are communicating via WhatsApp. Keep responses concise and avoid complex markdown tables if possible.
+
+STRICT EXECUTION RULES:
+1. When you need to execute code/scripts, you MUST save them to the script directory using \`write_file\`.
+2. Execute the script using \`run_command\`.
+3. Read the output.
+4. IMMEDIATELY delete the script file using \`delete_file\` after execution.
+5. Do not leave any files in the script directory.`;
+
+    const agent = new Agent({ context });
     await agent.init();
     
     // Keep track of messages sent by the bot to avoid loops

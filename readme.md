@@ -129,6 +129,14 @@ Connect your AI agent to external messaging platforms.
             *   You include `@ai` in the message.
             *   You reply to the bot's message.
 
+3.  **Email (Gmail/SMTP)**
+    *   **Setup:** Run `ai-agent integration setup email`. Select **Gmail** or **Custom SMTP/IMAP**.
+    *   **Gmail Note:** You MUST use an [App Password](https://support.google.com/accounts/answer/185833). Normal passwords won't work with 2FA enabled.
+    *   **Auth:** Credentials saved to `~/.ai-agent-config.json`.
+    *   **Usage:**
+        *   Send an email to the configured address with `@ai` in the subject or body.
+        *   The agent will reply to your email with the result.
+
 ### Security & Safe Mode
 ⚠️ **Power User Tool**: This agent executes real shell commands.
 *   **Safe Mode**: Type `/safe-mode` to enable. When enabled, the agent will **never** execute `run_command`, `write_file`, or `delete_file` without your explicit confirmation.

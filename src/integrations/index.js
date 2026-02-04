@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { setupWhatsApp } from './whatsapp.js';
 import { setupTelegram } from './telegram.js';
+import { setupEmail } from './email.js';
 
 const INTEGRATIONS = {
     'whatsapp': {
@@ -12,6 +13,11 @@ const INTEGRATIONS = {
         name: 'Telegram',
         description: 'Chat with the agent via Telegram Bot',
         setup: setupTelegram
+    },
+    'email': {
+        name: 'Email (Gmail/SMTP)',
+        description: 'Receive tasks and reply via Email',
+        setup: setupEmail
     }
 };
 

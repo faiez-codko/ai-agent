@@ -8,6 +8,8 @@ import { summarizeMemory } from './memory/summary.js';
 import { sendMessage as sendTelegramMessage } from './tools/telegram.js';
 import chalk from 'chalk';
 import path from 'path';
+import os from 'os';
+import fs from 'fs';
 
 export class Agent {
   constructor(config = {}) {
@@ -19,6 +21,7 @@ export class Agent {
     this.personaId = config.personaId || 'default';
     this.persona = null; // Loaded in init()
     this.initialModel = config.model || null;
+    this.additionalContext = config.context || ''; // Extra instructions (e.g. for integrations)
     
     // ID is stable identifier (e.g. for storage)
     // Name is display name / persona name
@@ -56,7 +59,17 @@ export class Agent {
         }
     }
 
-    const systemPrompt = `You are ${this.name}.
+    // Ensure Script Directory Exists (if context implies usage)
+    const scriptDir = path.join(os.homedir(), '.agent', 'scripts');
+    if (!fs.existsSync(scriptDir)) {
+        try {
+            fs.mkdirSync(scriptDir, { recursive: true });
+        } catch (e) {
+            console.error('Failed to create script directory:', e);
+        }
+    }
+
+    let systemPrompt = `You are ${this.name}.
 ${this.persona.systemPrompt}
 
 You have access to the following tools: ${this.toolsDefinition.map(t => t.name).join(', ')}.
@@ -79,6 +92,11 @@ For any complex task (multi-step, research, or development), you MUST use the "3
 4. UPDATE \`.agent/task_plan.md\` immediately after completing a phase (mark [x], update Status).
 5. Log errors in \`.agent/task_plan.md\` to build knowledge.
 `;
+
+    // Append Additional Context (e.g. Integration Rules)
+    if (this.additionalContext) {
+        systemPrompt += `\n\n${this.additionalContext}\n\nIMPORTANT: The script directory is available at: ${scriptDir}`;
+    }
 
     this.memory.push({
       role: 'system',

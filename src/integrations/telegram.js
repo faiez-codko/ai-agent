@@ -95,7 +95,18 @@ export async function setupTelegram() {
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-    const agent = new Agent();
+    // Define Strict Rules for Telegram
+    const context = `CONTEXT AWARENESS:
+You are communicating via Telegram. Keep responses concise and formatted for chat.
+
+STRICT EXECUTION RULES:
+1. When you need to execute code/scripts, you MUST save them to the script directory using \`write_file\`.
+2. Execute the script using \`run_command\`.
+3. Read the output.
+4. IMMEDIATELY delete the script file using \`delete_file\` after execution.
+5. Do not leave any files in the script directory.`;
+
+    const agent = new Agent({ context });
     await agent.init();
     
     console.log(chalk.blue('Agent initialized.'));
