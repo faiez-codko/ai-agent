@@ -174,5 +174,25 @@ Change your AI provider or model settings:
 ai-agent setup
 ```
 
+#PM2 Integration
+To run the agent persistently using PM2:
+```bash
+pm2 start ai-agent --name ai-agent-whatsapp --interpreter none -- integration setup whatsapp
+```
+
+```bash
+pm2 start ai-agent --name ai-agent-telegram --interpreter none -- integration setup telegram
+```
+
+```bash
+pm2 start ai-agent --name ai-agent-email --interpreter none -- integration setup email
+```
+
+```bash
+pm2 start ai-agent --name ai-agent-web --interpreter none -- web
+```
+
+
+
 ## Architecture
 The system uses a centralized `AgentManager` to handle multiple `Agent` instances. Each agent has a specific `Persona` (system prompt + allowed tools). Agents can communicate and delegate tasks using the `delegate_task` tool.
