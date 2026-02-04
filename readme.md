@@ -101,6 +101,34 @@ ai-agent web
 ```
 This will start a local server at `http://localhost:8456` where you can chat with agents in a modern UI.
 
+### Chat Integrations
+
+Connect your AI agent to external messaging platforms.
+
+**Commands:**
+*   `ai-agent integration list` - List available integrations.
+*   `ai-agent integration setup <name>` - Setup and start an integration.
+
+**Supported Platforms:**
+
+1.  **WhatsApp**
+    *   **Setup:** Run `ai-agent integration setup whatsapp`. Scan the QR code with your WhatsApp mobile app (Linked Devices).
+    *   **Auth:** Credentials saved to `~/.auth_info_baileys`.
+    *   **Usage:**
+        *   The agent listens for the **@ai** tag in any chat.
+        *   Send a message with `@ai` (e.g., "@ai create a plan") to trigger a response.
+        *   Works in "Note to Self", Private Chats, and Groups.
+
+2.  **Telegram**
+    *   **Setup:** Run `ai-agent integration setup telegram`. Enter your Bot Token (from [@BotFather](https://t.me/BotFather)).
+    *   **Auth:** Token saved to `~/.ai-agent-config.json`.
+    *   **Usage:**
+        *   **Private Chat:** The bot responds to every message.
+        *   **Groups:** The bot responds if:
+            *   You mention it (`@YourBotName`).
+            *   You include `@ai` in the message.
+            *   You reply to the bot's message.
+
 ### Security & Safe Mode
 ⚠️ **Power User Tool**: This agent executes real shell commands.
 *   **Safe Mode**: Type `/safe-mode` to enable. When enabled, the agent will **never** execute `run_command`, `write_file`, or `delete_file` without your explicit confirmation.

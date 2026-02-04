@@ -2,10 +2,11 @@ import makeWASocket, { useMultiFileAuthState, DisconnectReason, jidNormalizedUse
 import qrcode from 'qrcode-terminal';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import chalk from 'chalk';
 import { Agent } from '../agent.js';
 
-const AUTH_DIR = path.join(process.cwd(), '.auth_info_baileys');
+const AUTH_DIR = path.join(os.homedir(), '.auth_info_baileys');
 
 export async function setupWhatsApp() {
     console.log(chalk.blue('Setting up WhatsApp Integration...'));

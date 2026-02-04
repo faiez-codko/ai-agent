@@ -1,11 +1,17 @@
 import chalk from 'chalk';
 import { setupWhatsApp } from './whatsapp.js';
+import { setupTelegram } from './telegram.js';
 
 const INTEGRATIONS = {
     'whatsapp': {
         name: 'WhatsApp',
         description: 'Chat with the agent via WhatsApp using Baileys',
         setup: setupWhatsApp
+    },
+    'telegram': {
+        name: 'Telegram',
+        description: 'Chat with the agent via Telegram Bot',
+        setup: setupTelegram
     }
 };
 
