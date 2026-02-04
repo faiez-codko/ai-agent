@@ -109,14 +109,18 @@ STRICT EXECUTION RULES:
              }
         }
 
-        // 2. Trigger Check: Must contain "@ai"
-        if (!text.toLowerCase().includes('@ai')) {
+        // 2. Trigger Check: 
+        // - If from ME: Always trigger (unless it's a command, handled above)
+        // - If from OTHERS: Must contain "@ai"
+        const isTriggered = isFromMe || text.toLowerCase().includes('@ai');
+
+        if (!isTriggered) {
             return;
         }
 
         console.log(chalk.gray(`Triggered by ${isFromMe ? 'ME' : remoteJid}: ${text}`));
 
-        // Clean the prompt (remove @ai)
+        // Clean the prompt (remove @ai if present)
         const prompt = text.replace(/@ai/gi, '').trim();
 
         if (!prompt) return; // Ignore empty prompts after removing tag
