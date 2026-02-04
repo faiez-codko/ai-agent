@@ -7,6 +7,7 @@ import { writeFile, readFile } from './tools/fs.js';
 import { runCommand } from './tools/shell.js';
 import * as Diff from 'diff';
 import { webUiTools } from './tools/web_ui.js';
+import { listIntegrations as listInt, setupIntegration as setupInt } from './integrations/index.js';
 
 export async function web() {
   const spinner = ora('Starting web interface...').start();
@@ -222,4 +223,12 @@ export async function run(instruction, agentInstance = null) {
     spinner.fail('Command generation failed');
     console.error(chalk.red(error.message));
   }
+}
+
+export function integrationList() {
+    listInt();
+}
+
+export async function integrationSetup(name) {
+    await setupInt(name);
 }

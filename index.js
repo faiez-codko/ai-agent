@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import { Command } from 'commander';
-import { setup, read, update, fix, run, web } from './src/commands.js';
+import { setup, read, update, fix, run, web, integrationList, integrationSetup } from './src/commands.js';
 import { startInteractiveMode } from './src/interactive.js';
 import chalk from 'chalk';
 import path from 'path';
@@ -63,6 +63,18 @@ if (process.argv.length <= 2) {
     .command('web')
     .description('Start the web interface')
     .action(web);
+
+  const integration = program.command('integration').description('Manage integrations');
+
+  integration
+    .command('list')
+    .description('List available integrations')
+    .action(integrationList);
+
+  integration
+    .command('setup <name>')
+    .description('Setup a specific integration')
+    .action(integrationSetup);
 
   program.parse();
 }
