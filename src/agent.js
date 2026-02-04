@@ -254,9 +254,30 @@ For any complex task (multi-step, research, or development), you MUST use the "3
           return await this.provider.chat(messages, tools, onUpdate);
       } catch (e) {
         const message = e && e.message ? String(e.message) : String(e);
-        if (message.includes('Input tokens exceed the configured limit')) {
-            const smaller = this._buildContext(20);
-            return await this.provider.chat(smaller, tools, onUpdate);
+        // Catch various context length errors from different providers
+        if (message.includes('Input tokens exceed') || 
+            message.includes('context_length_exceeded') || 
+            message.includes('maximum context length')) {
+            
+            console.log(chalk.yellow('⚠️  Token limit exceeded. Retrying with smaller context...'));
+            
+            // Fallback 1: Limit to 20 messages
+            try {
+                const smaller = this._buildContext(20);
+                return await this.provider.chat(smaller, tools, onUpdate);
+            } catch (e2) {
+                // Fallback 2: Limit to 10 messages AND truncate large outputs
+                console.log(chalk.yellow('⚠️  Still too large. Retrying with minimal context and truncation...'));
+                try {
+                    const tiny = this._buildContext(10, true);
+                    return await this.provider.chat(tiny, tools, onUpdate);
+                } catch (e3) {
+                    // Fallback 3: Last resort - just system prompt and last user message
+                    console.log(chalk.red('⚠️  Critical token overflow. Retrying with single message...'));
+                    const lastResort = this._buildContext(1, true);
+                    return await this.provider.chat(lastResort, tools, onUpdate);
+                }
+            }
         }
         try {
             await sendTelegramMessage(`Agent ${this.id} provider.chat error: ${message}`);
@@ -265,7 +286,7 @@ For any complex task (multi-step, research, or development), you MUST use the "3
       }
   }
 
-  _buildContext(maxMessages = 40) {
+  _buildContext(maxMessages = 40, truncateLargeOutputs = false) {
     const systemMessages = this.memory.filter(m => m.role === 'system');
     const nonSystem = this.memory.filter(m => m.role !== 'system');
     let recent = nonSystem.slice(-maxMessages);
@@ -275,7 +296,23 @@ For any complex task (multi-step, research, or development), you MUST use the "3
         recent.shift();
     }
     
-    return [...systemMessages, ...recent];
+    let context = [...systemMessages, ...recent];
+
+    if (truncateLargeOutputs) {
+        // Create new objects to avoid mutating memory
+        context = context.map(msg => {
+            // Truncate tool outputs and assistant messages that are too long
+            if ((msg.role === 'tool' || msg.role === 'assistant') && msg.content && msg.content.length > 1000) {
+                return {
+                    ...msg,
+                    content: msg.content.substring(0, 1000) + '... [Content truncated due to size limit]'
+                };
+            }
+            return msg;
+        });
+    }
+    
+    return context;
   }
 
   async _maybeSummarizeHistory() {
