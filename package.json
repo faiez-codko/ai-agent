@@ -27,7 +27,7 @@
     "sqlite3": "^5.1.7",
     "telegraf": "^4.16.3"
   },
-  "name": "ai-agent",
+  "name": "@faiez-codko/ai-agent",
   "version": "1.0.0",
   "description": "A powerful, multi-personality AI agent for your terminal. This tool allows you to collaborate with a team of specialized AI agents (Project Manager, Team Lead, Engineers, QA) to automate coding tasks, manage projects, and execute system commands directly from your shell.",
   "main": "index.js",
