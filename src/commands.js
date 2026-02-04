@@ -28,28 +28,32 @@ export async function setup() {
   console.log(chalk.blue.bold('\n--- AI Agent Setup ---\n'));
 
   while (true) {
+    console.log(chalk.grey.bold('1. AI Provider'));
+    console.log(chalk.grey.bold('2. SMS Gateway (sms-gate.app)'));
+    console.log(chalk.grey.bold('3. Telegram Integration'));
+    console.log(chalk.grey.bold('4. GitHub Integration'));
+    console.log(chalk.grey.bold('5. Exit'));
     const { action } = await inquirer.prompt([
       {
         type: 'list',
         name: 'action',
         message: 'What would you like to configure?',
         choices: [
-          { name: '1. AI Provider', value: 'ai' },
-          { name: '2. SMS Gateway (sms-gate.app)', value: 'sms' },
-          { name: '3. Telegram Integration', value: 'telegram' },
-          { name: '4. GitHub Integration', value: 'github' },
-          new inquirer.Separator(),
-          { name: 'Exit', value: 'exit' }
+          { name: '1. AI Provider', value: '1' },
+          { name: '2. SMS Gateway (sms-gate.app)', value: '2' },
+          { name: '3. Telegram Integration', value: '3' },
+          { name: '4. GitHub Integration', value: '4' },
+          { name: 'Exit', value: '5' }
         ]
       }
     ]);
 
-    if (action === 'exit') {
+    if (action === '5') {
       console.log(chalk.green('Setup completed.'));
       break;
     }
 
-    if (action === 'ai') {
+    if (action === '1') {
       const providerAnswers = await inquirer.prompt([
         {
           type: 'list',
@@ -98,7 +102,7 @@ export async function setup() {
       await saveConfig(config);
       console.log(chalk.green('AI Provider configuration saved!\n'));
 
-    } else if (action === 'sms') {
+    } else if (action === '2') {
       const smsAnswers = await inquirer.prompt([
         {
             type: 'input',
@@ -130,7 +134,7 @@ export async function setup() {
       await saveConfig(config);
       console.log(chalk.green('SMS Gateway configuration saved!\n'));
 
-    } else if (action === 'telegram') {
+    } else if (action === '3') {
       const telegramAnswers = await inquirer.prompt([
         {
             type: 'password',
@@ -146,7 +150,7 @@ export async function setup() {
       await saveConfig(config);
       console.log(chalk.green('Telegram configuration saved!\n'));
 
-    } else if (action === 'github') {
+    } else if (action === '4') {
       const githubAnswers = await inquirer.prompt([
         {
             type: 'password',
