@@ -43,12 +43,13 @@ export async function setup() {
           { name: '2. SMS Gateway (sms-gate.app)', value: '2' },
           { name: '3. Telegram Integration', value: '3' },
           { name: '4. GitHub Integration', value: '4' },
-          { name: 'Exit', value: '5' }
+          { name: '5. Email Integration (Gmail/SMTP)', value: '5' },
+          { name: 'Exit', value: '6' }
         ]
       }
     ]);
 
-    if (action === '5') {
+    if (action === '6') {
       console.log(chalk.green('Setup completed.'));
       break;
     }
@@ -165,6 +166,60 @@ export async function setup() {
       
       await saveConfig(config);
       console.log(chalk.green('GitHub configuration saved!\n'));
+
+    } else if (action === '5') {
+        const emailAnswers = await inquirer.prompt([
+            {
+                type: 'list',
+                name: 'provider',
+                message: 'Select Email Provider:',
+                choices: ['Gmail', 'Custom SMTP/IMAP'],
+                default: config.email?.provider || 'Gmail'
+            },
+            {
+                type: 'input',
+                name: 'user',
+                message: 'Email Address:',
+                default: config.email?.user || '',
+                validate: input => input.includes('@') ? true : 'Invalid email'
+            },
+            {
+                type: 'password',
+                name: 'password',
+                message: 'Password (or App Password):',
+                mask: '*',
+                default: config.email?.password || '',
+                validate: input => input.length > 0 ? true : 'Password is required'
+            }
+        ]);
+
+        let emailConfig = {
+            user: emailAnswers.user,
+            password: emailAnswers.password,
+            provider: emailAnswers.provider
+        };
+
+        if (emailAnswers.provider === 'Custom SMTP/IMAP') {
+            const customAnswers = await inquirer.prompt([
+                { type: 'input', name: 'host', message: 'IMAP Host:', default: config.email?.host || '' },
+                { type: 'number', name: 'port', message: 'IMAP Port:', default: config.email?.port || 993 },
+                { type: 'confirm', name: 'tls', message: 'Use TLS?', default: config.email?.tls !== false },
+                { type: 'input', name: 'smtpHost', message: 'SMTP Host:', default: config.email?.smtpHost || '' },
+                { type: 'number', name: 'smtpPort', message: 'SMTP Port:', default: config.email?.smtpPort || 587 }
+            ]);
+            Object.assign(emailConfig, customAnswers);
+        } else {
+            // Gmail Defaults
+            emailConfig.host = 'imap.gmail.com';
+            emailConfig.port = 993;
+            emailConfig.tls = true;
+            emailConfig.smtpHost = 'smtp.gmail.com';
+            emailConfig.smtpPort = 587;
+        }
+
+        config.email = emailConfig;
+        await saveConfig(config);
+        console.log(chalk.green('Email configuration saved!\n'));
     }
   }
 }

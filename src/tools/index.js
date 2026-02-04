@@ -10,6 +10,7 @@ import { visionToolDefinitions, visionTools } from './vision.js';
 import { desktopToolDefinitions, desktopTools } from './desktop.js';
 import { githubToolDefinitions, githubTools } from './github.js';
 import { ghToolDefinitions, ghTools } from './gh.js';
+import { emailToolDefinitions, emailTools } from './email.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -224,10 +225,12 @@ export const toolDefinitions = [
   ...visionToolDefinitions,
   ...desktopToolDefinitions,
   ...githubToolDefinitions,
-  ...ghToolDefinitions
+  ...ghToolDefinitions,
+  ...emailToolDefinitions
 ];
 
 export const tools = {
+  ...emailTools,
   ...browser_tools,
   ...db_tools,
   ...schedulerTools,
