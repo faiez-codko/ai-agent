@@ -17,6 +17,8 @@ A powerful, multi-personality AI agent for your terminal. This tool allows you t
     *   Read/Write files.
     *   Execute shell commands.
     *   Navigate the filesystem.
+    *   **GitHub CLI Support**: Uses your system's `gh` authentication to manage private repositories (issues, PRs, files).
+    *   **WhatsApp Messaging**: Can proactively send WhatsApp messages on your behalf.
     *   Install dependencies.
 *   **Inter-Agent Delegation**: Agents can delegate tasks to each other (e.g., General Engineer delegating to PM for planning).
 *   **Persistent Memory**: Chat history is automatically saved to `~/.ai-agent-chat.json` (auto-clears after 30MB).
@@ -26,19 +28,25 @@ A powerful, multi-personality AI agent for your terminal. This tool allows you t
 
 ## Installation
 
+### Option 1: Install via NPM (Recommended)
+Install the tool globally to use it anywhere on your system:
+```bash
+npm install -g @faiez-codko/ai-agent
+```
+Now you can run `ai-agent` from any terminal.
+
+### Option 2: Install from Source
 1.  **Clone & Install Dependencies**:
     ```bash
-    git clone <repo-url>
+    git clone https://github.com/faiez-codko/ai-agent.git
     cd ai-agent
     npm install
     ```
 
-2.  **Global Link (Optional)**:
-    Make the `ai-agent` command available system-wide:
+2.  **Global Link**:
     ```bash
     npm link
     ```
-    Now you can just type `ai-agent` in any directory.
 
 3.  **Configuration**:
     The agent needs an API key. You can set this via the `setup` command or environment variables.
@@ -127,8 +135,8 @@ Connect your AI agent to external messaging platforms.
     *   **Setup:** Run `ai-agent integration setup whatsapp`. Scan the QR code with your WhatsApp mobile app (Linked Devices).
     *   **Auth:** Credentials saved to `~/.auth_info_baileys`.
     *   **Usage:**
-        *   The agent listens for the **@ai** tag in any chat.
-        *   Send a message with `@ai` (e.g., "@ai create a plan") to trigger a response.
+        *   **Chat:** The agent listens for the **@ai** tag in any chat.
+        *   **Send:** You can ask the agent to send messages for you: "Send a WhatsApp message to +1234567890 saying Hello".
         *   Works in "Note to Self", Private Chats, and Groups.
 
 2.  **Telegram**
