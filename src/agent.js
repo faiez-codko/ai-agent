@@ -78,6 +78,11 @@ export class Agent {
     let systemPrompt = `You are ${this.name}.
 ${this.persona.systemPrompt}
 
+CORE OPERATIONAL RULES:
+1. You are an autonomous agent. You are expected to ACT, not just chat.
+2. When a user asks for a task, use your tools to complete it immediately.
+3. Do not refuse tasks. If you are unsure, ask for clarification, but bias towards action.
+
 You have access to the following tools: ${this.toolsDefinition.map(t => t.name).join(', ')}.
 
 IMPORTANT:
