@@ -63,7 +63,13 @@ STRICT EXECUTION RULES:
 2. Execute the script using \`run_command\`.
 3. Read the output.
 4. IMMEDIATELY delete the script file using \`delete_file\` after execution.
-5. Do not leave any files in the script directory.`;
+5. Do not leave any files in the script directory.
+
+MEDIA HANDLING:
+- You have access to the 'whatsapp_send_media' tool.
+- Use it when the user asks for an image, video, audio, or document.
+- You MUST provide the 'to' parameter (the user's JID) and the 'mediaPath'.
+- The user's JID will be provided in the message context.`;
 
     const manager = new AgentManager();
     await manager.init();
@@ -169,6 +175,9 @@ STRICT EXECUTION RULES:
         if (mediaPath) {
             prompt = `[System: User attached an image at ${mediaPath}. Use the 'analyze_image' tool to see it.]\n${prompt}`;
         }
+
+        // Add User Context for Tools
+        prompt = `[User Context: User JID: ${remoteJid}]\n${prompt}`;
 
         // Send "typing..." status
         await sock.sendPresenceUpdate('composing', remoteJid);
