@@ -150,7 +150,7 @@ STRICT EXECUTION RULES:
         // - Trigger if explicitly mentioned (@ai)
         // - Trigger if it's a "Self Chat" (Note to Self)
         const isSelfChat = remoteJid === meId;
-        const isTriggered = text.toLowerCase().includes('@ai') || isSelfChat || !!mediaPath;
+        const isTriggered = text.toLowerCase().includes('@ai') || isSelfChat;
 
         if (!isTriggered) {
             // Cleanup media if not triggered
