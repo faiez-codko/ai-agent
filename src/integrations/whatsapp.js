@@ -116,13 +116,21 @@ MEDIA HANDLING:
         const pushName = msg.pushName || '';
 
         // DEBUG LOGGING: Help user identify JIDs for exclusion
+        const senderJid = msg.key.participant || msg.key.remoteJid; // In DMs, remoteJid is the sender. In Groups, participant is the sender.
+        
         console.log(chalk.cyan('--- Incoming WhatsApp Message ---'));
         console.log(chalk.yellow(`Chat JID (remoteJid): ${remoteJid}`));
+        console.log(chalk.yellow(`Sender JID (User): ${senderJid}`));
         console.log(chalk.yellow(`Sender Name (pushName): ${pushName}`));
+        console.log(chalk.gray(`My JID: ${meId}`));
+        
         if (msg.key.participant) {
-            console.log(chalk.yellow(`Participant JID: ${msg.key.participant}`));
+             console.log(chalk.gray(`(Group Chat detected - Sender is participant)`));
+        } else {
+             console.log(chalk.gray(`(Direct Message detected)`));
         }
         console.log(chalk.cyan('-----------------------------------'));
+        console.log(JSON.stringify(msg, null, 4));
 
         // Exclusion Check (Dynamic Resolution)
         // 1. Check if remoteJid contains any excluded number
