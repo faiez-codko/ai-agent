@@ -268,16 +268,32 @@ export async function setup() {
                 default: config.whatsapp_excluded || ''
             },
             {
+                type: 'confirm',
+                name: 'groupsEnabled',
+                message: 'Enable AI in WhatsApp Groups?',
+                default: config.whatsapp_groups_enabled !== false // Default to true
+            },
+            {
+                type: 'confirm',
+                name: 'updatePrompt',
+                message: 'Do you want to update the custom System Prompt?',
+                default: false
+            },
+            {
                 type: 'editor',
                 name: 'systemPrompt',
                 message: 'Enter custom System Prompt for WhatsApp Agent:',
-                default: config.whatsapp_system_prompt || ''
+                default: config.whatsapp_system_prompt || '',
+                when: (answers) => answers.updatePrompt
             }
         ]);
 
         config.whatsapp_trigger = waAnswers.trigger;
         config.whatsapp_excluded = waAnswers.excluded;
-        config.whatsapp_system_prompt = waAnswers.systemPrompt;
+        config.whatsapp_groups_enabled = waAnswers.groupsEnabled;
+        if (waAnswers.updatePrompt) {
+            config.whatsapp_system_prompt = waAnswers.systemPrompt;
+        }
         
         await saveConfig(config);
         console.log(chalk.green('WhatsApp configuration saved!'));

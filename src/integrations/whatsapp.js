@@ -58,6 +58,7 @@ async function startListening(sock) {
     const customTrigger = config.whatsapp_trigger || '@ai';
     const customPrompt = config.whatsapp_system_prompt || '';
     const excludedJids = (config.whatsapp_excluded || '').split(',').map(s => s.trim()).filter(Boolean);
+    const groupsEnabled = config.whatsapp_groups_enabled !== false; // Default to true
 
     // Define Strict Rules for WhatsApp
     let context = `CONTEXT AWARENESS:
@@ -135,6 +136,12 @@ MEDIA HANDLING:
         }
         console.log(chalk.cyan('-----------------------------------'));
         console.log(JSON.stringify(msg, null, 4));
+
+        // Group Enable/Disable Check
+        if (remoteJid.endsWith('@g.us') && !groupsEnabled) {
+             console.log(chalk.gray(`Ignoring group message because groups are disabled.`));
+             return;
+        }
 
         // Exclusion Check (Dynamic Resolution)
         // 1. Check if remoteJid or remoteJidAlt contains any excluded number
