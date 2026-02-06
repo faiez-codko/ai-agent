@@ -115,6 +115,15 @@ MEDIA HANDLING:
         const msgId = msg.key.id;
         const pushName = msg.pushName || '';
 
+        // DEBUG LOGGING: Help user identify JIDs for exclusion
+        console.log(chalk.cyan('--- Incoming WhatsApp Message ---'));
+        console.log(chalk.yellow(`Chat JID (remoteJid): ${remoteJid}`));
+        console.log(chalk.yellow(`Sender Name (pushName): ${pushName}`));
+        if (msg.key.participant) {
+            console.log(chalk.yellow(`Participant JID: ${msg.key.participant}`));
+        }
+        console.log(chalk.cyan('-----------------------------------'));
+
         // Exclusion Check (Dynamic Resolution)
         // 1. Check if remoteJid contains any excluded number
         // 2. Check if the contact name/group subject matches any excluded name
