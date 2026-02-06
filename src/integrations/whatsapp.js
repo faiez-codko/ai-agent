@@ -117,9 +117,13 @@ MEDIA HANDLING:
 
         // DEBUG LOGGING: Help user identify JIDs for exclusion
         const senderJid = msg.key.participant || msg.key.remoteJid; // In DMs, remoteJid is the sender. In Groups, participant is the sender.
+        const remoteJidAlt = msg.key.remoteJidAlt; // Alternate JID (often the phone-number based JID for LIDs)
         
         console.log(chalk.cyan('--- Incoming WhatsApp Message ---'));
         console.log(chalk.yellow(`Chat JID (remoteJid): ${remoteJid}`));
+        if (remoteJidAlt) {
+            console.log(chalk.yellow(`Chat JID Alt (Phone-based): ${remoteJidAlt}`));
+        }
         console.log(chalk.yellow(`Sender JID (User): ${senderJid}`));
         console.log(chalk.yellow(`Sender Name (pushName): ${pushName}`));
         console.log(chalk.gray(`My JID: ${meId}`));
@@ -133,15 +137,19 @@ MEDIA HANDLING:
         console.log(JSON.stringify(msg, null, 4));
 
         // Exclusion Check (Dynamic Resolution)
-        // 1. Check if remoteJid contains any excluded number
+        // 1. Check if remoteJid or remoteJidAlt contains any excluded number
         // 2. Check if the contact name/group subject matches any excluded name
         
         let shouldExclude = false;
         for (const excluded of excludedJids) {
             // Case 1: Direct Number Match (e.g., '1234567890' in '1234567890@s.whatsapp.net')
-            if (remoteJid.includes(excluded.replace(/\D/g, ''))) { // strip non-digits for number check
-                shouldExclude = true;
-                break;
+            // Check both remoteJid and remoteJidAlt (if available)
+            const cleanExcluded = excluded.replace(/\D/g, '');
+            if (cleanExcluded.length > 0) {
+                 if (remoteJid.includes(cleanExcluded) || (remoteJidAlt && remoteJidAlt.includes(cleanExcluded))) { 
+                    shouldExclude = true;
+                    break;
+                }
             }
             
             // Case 2: Group Name / Contact Name Match
