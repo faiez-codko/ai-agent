@@ -57,6 +57,7 @@ async function startListening(sock) {
     const config = await loadConfig();
     const customTrigger = config.whatsapp_trigger || '@ai';
     const customPrompt = config.whatsapp_system_prompt || '';
+    const excludedJids = (config.whatsapp_excluded || '').split(',').map(s => s.trim()).filter(Boolean);
 
     // Define Strict Rules for WhatsApp
     let context = `CONTEXT AWARENESS:
@@ -112,6 +113,57 @@ MEDIA HANDLING:
         const remoteJid = msg.key.remoteJid;
         const isFromMe = msg.key.fromMe;
         const msgId = msg.key.id;
+        const pushName = msg.pushName || '';
+
+        // Exclusion Check (Dynamic Resolution)
+        // 1. Check if remoteJid contains any excluded number
+        // 2. Check if the contact name/group subject matches any excluded name
+        
+        let shouldExclude = false;
+        for (const excluded of excludedJids) {
+            // Case 1: Direct Number Match (e.g., '1234567890' in '1234567890@s.whatsapp.net')
+            if (remoteJid.includes(excluded.replace(/\D/g, ''))) { // strip non-digits for number check
+                shouldExclude = true;
+                break;
+            }
+            
+            // Case 2: Group Name / Contact Name Match
+            // We need to fetch group metadata if it's a group, or use pushName
+            if (remoteJid.endsWith('@g.us')) {
+                // It's a group. We need to check the group subject (name)
+                // CAUTION: Fetching metadata for every msg is slow. Ideally we cache this.
+                // For now, let's try a lightweight check or just rely on exact JID if we can't get name easily without network call.
+                // Actually, 'msg.key.participant' might be useful but group name is not in the message object usually.
+                // We will rely on user providing the number for groups if possible, OR we do a lazy fetch.
+                
+                // Let's do a quick cache-based approach or just fetch (rate limits apply)
+                try {
+                     // Only fetch if we really need to check names
+                     if (isNaN(excluded)) { // If exclusion is a Name (not a number)
+                        // This is expensive. To optimize, we should cache group names.
+                        // For MVP, we'll skip complex group name resolution on every message to avoid ban.
+                        // Suggest user to use Group ID if possible, or implement a cache later.
+                        // BUT, if the user really wants name exclusion:
+                        const groupMetadata = await sock.groupMetadata(remoteJid);
+                        if (groupMetadata.subject === excluded) {
+                            shouldExclude = true;
+                            break;
+                        }
+                     }
+                } catch (e) {}
+            } else {
+                 // Private chat: check pushName
+                 if (pushName === excluded) {
+                     shouldExclude = true;
+                     break;
+                 }
+            }
+        }
+
+        if (shouldExclude) {
+            console.log(chalk.gray(`Ignoring message from excluded entity: ${remoteJid}`));
+            return;
+        }
 
         // Loop prevention: Ignore messages we sent ourselves via code
         if (sentMsgIds.has(msgId)) {

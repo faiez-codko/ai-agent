@@ -262,6 +262,12 @@ export async function setup() {
                 default: config.whatsapp_trigger || '@ai'
             },
             {
+                type: 'input',
+                name: 'excluded',
+                message: 'Enter numbers (e.g. 1234567890) or exact Group Names to exclude (comma separated):',
+                default: config.whatsapp_excluded || ''
+            },
+            {
                 type: 'editor',
                 name: 'systemPrompt',
                 message: 'Enter custom System Prompt for WhatsApp Agent:',
@@ -270,6 +276,7 @@ export async function setup() {
         ]);
 
         config.whatsapp_trigger = waAnswers.trigger;
+        config.whatsapp_excluded = waAnswers.excluded;
         config.whatsapp_system_prompt = waAnswers.systemPrompt;
         
         await saveConfig(config);
