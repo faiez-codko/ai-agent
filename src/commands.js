@@ -34,7 +34,8 @@ export async function setup() {
     console.log(chalk.grey.bold('4. GitHub Integration'));
     console.log(chalk.grey.bold('5. Email Integration (Gmail/SMTP)'));
     console.log(chalk.grey.bold('6. Audio Configuration'));
-    console.log(chalk.grey.bold('7. Exit'));
+    console.log(chalk.grey.bold('7. WhatsApp Configuration'));
+    console.log(chalk.grey.bold('8. Exit'));
     const { action } = await inquirer.prompt([
       {
         type: 'list',
@@ -47,12 +48,13 @@ export async function setup() {
           { name: '4. GitHub Integration', value: '4' },
           { name: '5. Email Integration (Gmail/SMTP)', value: '5' },
           { name: '6. Audio Configuration', value: '6' },
-          { name: 'Exit', value: '7' }
+          { name: '7. WhatsApp Configuration', value: '7' },
+          { name: 'Exit', value: '8' }
         ]
       }
     ]);
 
-    if (action === '7') {
+    if (action === '8') {
       console.log(chalk.green('Setup completed.'));
       break;
     }
@@ -249,6 +251,29 @@ export async function setup() {
       }
       await saveConfig(config);
       console.log(chalk.green('Audio configuration saved!'));
+    }
+
+    if (action === '7') {
+        const waAnswers = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'trigger',
+                message: 'Enter custom trigger (leave empty for "@ai", type "none" for all messages):',
+                default: config.whatsapp_trigger || '@ai'
+            },
+            {
+                type: 'editor',
+                name: 'systemPrompt',
+                message: 'Enter custom System Prompt for WhatsApp Agent:',
+                default: config.whatsapp_system_prompt || ''
+            }
+        ]);
+
+        config.whatsapp_trigger = waAnswers.trigger;
+        config.whatsapp_system_prompt = waAnswers.systemPrompt;
+        
+        await saveConfig(config);
+        console.log(chalk.green('WhatsApp configuration saved!'));
     }
   }
 }

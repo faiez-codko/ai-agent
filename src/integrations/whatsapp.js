@@ -54,9 +54,19 @@ export async function setupWhatsApp() {
 }
 
 async function startListening(sock) {
+    const config = await loadConfig();
+    const customTrigger = config.whatsapp_trigger || '@ai';
+    const customPrompt = config.whatsapp_system_prompt || '';
+
     // Define Strict Rules for WhatsApp
-    const context = `CONTEXT AWARENESS:
-You are communicating via WhatsApp. Keep responses concise and avoid complex markdown tables if possible.
+    let context = `CONTEXT AWARENESS:
+You are communicating via WhatsApp. Keep responses concise and avoid complex markdown tables if possible.`;
+
+    if (customPrompt) {
+        context = `CUSTOM INSTRUCTIONS:\n${customPrompt}\n\n` + context;
+    }
+
+    context += `
 
 STRICT EXECUTION RULES:
 1. When you need to execute code/scripts, you MUST save them to the script directory using \`write_file\`.
@@ -153,10 +163,16 @@ MEDIA HANDLING:
         }
 
         // 2. Trigger Check: 
-        // - Trigger if explicitly mentioned (@ai)
+        // - Trigger if explicitly mentioned (customTrigger) or if trigger is 'none'
         // - Trigger if it's a "Self Chat" (Note to Self)
         const isSelfChat = remoteJid === meId;
-        const isTriggered = text.toLowerCase().includes('@ai') || isSelfChat;
+        let isTriggered = false;
+
+        if (customTrigger === 'none') {
+            isTriggered = true;
+        } else {
+            isTriggered = text.toLowerCase().includes(customTrigger.toLowerCase()) || isSelfChat;
+        }
 
         if (!isTriggered) {
             // Cleanup media if not triggered
@@ -166,8 +182,12 @@ MEDIA HANDLING:
 
         console.log(chalk.gray(`Triggered by ${isFromMe ? 'ME' : remoteJid}: ${text}`));
 
-        // Clean the prompt (remove @ai if present)
-        let prompt = text.replace(/@ai/gi, '').trim();
+        // Clean the prompt (remove trigger if present)
+        let prompt = text;
+        if (customTrigger !== 'none') {
+            const regex = new RegExp(customTrigger, 'gi');
+            prompt = text.replace(regex, '').trim();
+        }
 
         if (!prompt && !mediaPath) return; // Ignore empty prompts after removing tag
 
