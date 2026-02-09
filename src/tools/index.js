@@ -12,6 +12,7 @@ import { githubToolDefinitions, githubTools } from './github.js';
 import { ghToolDefinitions, ghTools } from './gh.js';
 import { emailToolDefinitions, emailTools } from './email.js';
 import { whatsappToolDefinitions, whatsappTools } from './whatsapp.js';
+import memoryTools from './memory.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -220,6 +221,52 @@ export const toolDefinitions = [
       required: ["table"]
     }
   },
+  {
+    name: "memory_save",
+    description: "Save information to long-term memory. Use this to remember important facts, rules, or project details.",
+    parameters: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Unique key/title for the memory (e.g., 'project_setup', 'user_preference_theme')." },
+        content: { type: "string", description: "The content to remember." },
+        category: { type: "string", description: "Category/folder (default: 'general')." }
+      },
+      required: ["key", "content"]
+    }
+  },
+  {
+    name: "memory_read",
+    description: "Read a specific memory by key.",
+    parameters: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "The key of the memory to read." },
+        category: { type: "string", description: "Category (default: 'general')." }
+      },
+      required: ["key"]
+    }
+  },
+  {
+    name: "memory_list",
+    description: "List available memory keys.",
+    parameters: {
+      type: "object",
+      properties: {
+        category: { type: "string", description: "Category to list (optional)." }
+      }
+    }
+  },
+  {
+    name: "memory_search",
+    description: "Search all memories for keywords.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The search query." }
+      },
+      required: ["query"]
+    }
+  },
   ...schedulerToolDefinitions,
   ...webUiToolDefinitions,
   ...smsToolDefinitions,
@@ -232,6 +279,7 @@ export const toolDefinitions = [
 ];
 
 export const tools = {
+  ...memoryTools,
   ...emailTools,
   ...whatsappTools,
   ...browser_tools,

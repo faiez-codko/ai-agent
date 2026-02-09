@@ -249,11 +249,40 @@ NOTE: Ensure the directory \`${agentDir}\` exists before writing files.
             if (onUpdate) onUpdate({ type: 'tool_end', tool: toolName, result: typeof result === 'string' ? result.substring(0, 100) + '...' : 'Done' });
 
             // Add result to memory
+            let memoryContent = typeof result === 'string' ? result : JSON.stringify(result);
+            
+            // CONTEXT OPTIMIZATION: Offload large tool outputs to file
+            const MAX_OUTPUT_LENGTH = 3000;
+            if (memoryContent.length > MAX_OUTPUT_LENGTH) {
+                try {
+                    const overflowDir = path.join(process.cwd(), '.agent', 'overflow');
+                    if (!fs.existsSync(overflowDir)) {
+                        fs.mkdirSync(overflowDir, { recursive: true });
+                    }
+                    
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const safeToolName = toolName.replace(/[^a-zA-Z0-9]/g, '_');
+                    const filename = `overflow_${timestamp}_${safeToolName}.txt`;
+                    const filePath = path.join(overflowDir, filename);
+                    
+                    fs.writeFileSync(filePath, memoryContent);
+                    
+                    const preview = memoryContent.substring(0, 500);
+                    memoryContent = `[SYSTEM: Tool output too large (${memoryContent.length} chars). Full content saved to: ${filePath}\nPreview: ${preview}...\n(Use 'read_file' to see full content if needed)]`;
+                    
+                    console.log(chalk.yellow(`⚠️  Tool output offloaded to ${filename} (${memoryContent.length} chars)`));
+                } catch (err) {
+                    console.error('Failed to offload large tool output:', err);
+                    // Fallback: truncate without saving if file write fails
+                    memoryContent = memoryContent.substring(0, MAX_OUTPUT_LENGTH) + '... [Truncated due to error]';
+                }
+            }
+
             this.memory.push({
                 role: 'tool',
                 tool_call_id: call.id,
                 name: toolName,
-                content: typeof result === 'string' ? result : JSON.stringify(result)
+                content: memoryContent
             });
         }
     }

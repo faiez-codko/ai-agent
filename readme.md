@@ -26,6 +26,27 @@ A powerful, multi-personality AI agent for your terminal. This tool allows you t
 *   **Safe Mode**: Toggleable protection against automatic file deletion or command execution.
 *   **Global Access**: Run `ai-agent` from anywhere.
 
+## 🧠 Memory & Context Optimization
+
+### 1. Unlimited Persistent Memory
+The agent now has a long-term "brain" to remember project details, rules, and preferences indefinitely.
+
+*   **How it works**: The agent can explicitly save information to your local filesystem in `.agent/memory/`.
+*   **Capabilities**:
+    *   **Save**: The agent uses `memory_save` to store facts (e.g., "The API key is in .env", "User prefers dark mode").
+    *   **Recall**: The agent uses `memory_search` or `memory_read` to retrieve this info when needed.
+    *   **Benefit**: You don't need to repeat instructions or project context in every new session.
+
+### 2. Context Window Optimization (Smart Offloading)
+Large files or command outputs no longer crash the agent or fill up its context window.
+
+*   **The Problem**: Reading a 500-line log file used to consume the entire AI context window, leading to "Memory Full" errors or forgetfulness.
+*   **The Solution**: 
+    *   If a tool's output is larger than **3,000 characters**, the agent automatically saves it to a file (`.agent/overflow/`).
+    *   Only a **500-character preview** is kept in the active chat.
+    *   The agent can choose to read the full file later if it specifically needs that data.
+*   **Result**: You can paste huge logs or read massive codebases without breaking the agent.
+
 ## Installation
 
 ### Option 1: Install via NPM (Recommended)
