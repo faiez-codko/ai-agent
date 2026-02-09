@@ -12,13 +12,24 @@ if (!fs.existsSync(MEMORY_DIR)) {
 // Helper to sanitize keys for filenames
 const sanitizeKey = (key) => key.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
 
+// Helper to get memory directory for a request (scoped or global)
+const getMemoryDir = (agent) => {
+    // If agent provides a specific memory path (e.g., for WhatsApp users), use it
+    if (agent?.memoryDir) {
+        return agent.memoryDir;
+    }
+    // Default to global memory
+    return MEMORY_DIR;
+};
+
 const tools = {
     // Save information to long-term memory
-    memory_save: async ({ key, content, category = 'general' }) => {
+    memory_save: async ({ key, content, category = 'general' }, { agent }) => {
         try {
+            const baseDir = getMemoryDir(agent);
             const safeKey = sanitizeKey(key);
             const safeCategory = sanitizeKey(category);
-            const categoryDir = path.join(MEMORY_DIR, safeCategory);
+            const categoryDir = path.join(baseDir, safeCategory);
             
             if (!fs.existsSync(categoryDir)) {
                 fs.mkdirSync(categoryDir, { recursive: true });
@@ -43,21 +54,24 @@ ${content}
     },
 
     // Read a specific memory by key
-    memory_read: async ({ key, category = 'general' }) => {
+    memory_read: async ({ key, category = 'general' }, { agent }) => {
         try {
+            const baseDir = getMemoryDir(agent);
             const safeKey = sanitizeKey(key);
             const safeCategory = sanitizeKey(category);
-            const filePath = path.join(MEMORY_DIR, safeCategory, `${safeKey}.md`);
+            const filePath = path.join(baseDir, safeCategory, `${safeKey}.md`);
 
             if (!fs.existsSync(filePath)) {
                 // Try finding it in any category if not found in specified one
-                const categories = fs.readdirSync(MEMORY_DIR).filter(f => fs.statSync(path.join(MEMORY_DIR, f)).isDirectory());
-                for (const cat of categories) {
-                     const tryPath = path.join(MEMORY_DIR, cat, `${safeKey}.md`);
-                     if (fs.existsSync(tryPath)) {
-                         const content = fs.readFileSync(tryPath, 'utf8');
-                         return `[Found in category: ${cat}]\n${content}`;
-                     }
+                if (fs.existsSync(baseDir)) {
+                    const categories = fs.readdirSync(baseDir).filter(f => fs.statSync(path.join(baseDir, f)).isDirectory());
+                    for (const cat of categories) {
+                         const tryPath = path.join(baseDir, cat, `${safeKey}.md`);
+                         if (fs.existsSync(tryPath)) {
+                             const content = fs.readFileSync(tryPath, 'utf8');
+                             return `[Found in category: ${cat}]\n${content}`;
+                         }
+                    }
                 }
                 return `Memory not found: ${key} (checked category '${category}' and all others)`;
             }
@@ -70,22 +84,23 @@ ${content}
     },
 
     // List all memories (keys)
-    memory_list: async ({ category }) => {
+    memory_list: async ({ category }, { agent }) => {
         try {
+            const baseDir = getMemoryDir(agent);
             let files = [];
             
             if (category) {
                  const safeCategory = sanitizeKey(category);
-                 const categoryDir = path.join(MEMORY_DIR, safeCategory);
+                 const categoryDir = path.join(baseDir, safeCategory);
                  if (fs.existsSync(categoryDir)) {
                      files = fs.readdirSync(categoryDir).map(f => `${category}/${f}`);
                  }
             } else {
                 // List all recursively
-                if (fs.existsSync(MEMORY_DIR)) {
-                    const categories = fs.readdirSync(MEMORY_DIR).filter(f => fs.statSync(path.join(MEMORY_DIR, f)).isDirectory());
+                if (fs.existsSync(baseDir)) {
+                    const categories = fs.readdirSync(baseDir).filter(f => fs.statSync(path.join(baseDir, f)).isDirectory());
                     for (const cat of categories) {
-                        const catFiles = fs.readdirSync(path.join(MEMORY_DIR, cat)).map(f => `${cat}/${f}`);
+                        const catFiles = fs.readdirSync(path.join(baseDir, cat)).map(f => `${cat}/${f}`);
                         files = files.concat(catFiles);
                     }
                 }
@@ -99,15 +114,16 @@ ${content}
     },
 
     // Search memories for keywords
-    memory_search: async ({ query }) => {
+    memory_search: async ({ query }, { agent }) => {
         try {
+            const baseDir = getMemoryDir(agent);
             const results = [];
-            if (!fs.existsSync(MEMORY_DIR)) return "No memories found.";
+            if (!fs.existsSync(baseDir)) return "No memories found.";
 
-            const categories = fs.readdirSync(MEMORY_DIR).filter(f => fs.statSync(path.join(MEMORY_DIR, f)).isDirectory());
+            const categories = fs.readdirSync(baseDir).filter(f => fs.statSync(path.join(baseDir, f)).isDirectory());
             
             for (const cat of categories) {
-                const catDir = path.join(MEMORY_DIR, cat);
+                const catDir = path.join(baseDir, cat);
                 const files = fs.readdirSync(catDir);
                 
                 for (const file of files) {

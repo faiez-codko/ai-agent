@@ -309,6 +309,12 @@ MEDIA HANDLING:
                  fs.mkdirSync(agentDir, { recursive: true });
             }
 
+            // ISOLATED MEMORY: Assign a specific memory directory for this user
+            agent.memoryDir = path.join(agentDir, 'memory');
+            if (!fs.existsSync(agent.memoryDir)) {
+                fs.mkdirSync(agent.memoryDir, { recursive: true });
+            }
+
             if (systemMsg && !systemMsg.content.includes('STRICT EXECUTION RULES')) {
                 systemMsg.content += `\n\n${context}`;
             } else if (!systemMsg) {
