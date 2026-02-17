@@ -12,6 +12,7 @@ import { githubToolDefinitions, githubTools } from './github.js';
 import { ghToolDefinitions, ghTools } from './gh.js';
 import { emailToolDefinitions, emailTools } from './email.js';
 import { whatsappToolDefinitions, whatsappTools } from './whatsapp.js';
+import { audioToolDefinitions, audioTools } from './audio.js';
 import memoryTools from './memory.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -275,13 +276,15 @@ export const toolDefinitions = [
   ...githubToolDefinitions,
   ...ghToolDefinitions,
   ...emailToolDefinitions,
-  ...whatsappToolDefinitions
+  ...whatsappToolDefinitions,
+  ...audioToolDefinitions
 ];
 
 export const tools = {
   ...memoryTools,
   ...emailTools,
   ...whatsappTools,
+  ...audioTools,
   ...browser_tools,
   ...db_tools,
   ...schedulerTools,

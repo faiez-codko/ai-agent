@@ -47,6 +47,22 @@ Large files or command outputs no longer crash the agent or fill up its context 
     *   The agent can choose to read the full file later if it specifically needs that data.
 *   **Result**: You can paste huge logs or read massive codebases without breaking the agent.
 
+## 🎧 Audio Capabilities (New!)
+
+The agent can now speak, listen, and hold voice conversations using **Pollinations.ai**.
+
+*   **Text-to-Speech (TTS)**: The agent can generate audio files from text using various high-quality voices (OpenAI `alloy`, `nova`, `shimmer` and ElevenLabs clones).
+    *   *Usage*: `text_to_speech(text="Hello world", voice="nova")`
+*   **Speech-to-Text (STT)**: Transcribe audio files (mp3, wav, etc.) to text using Whisper Large v3.
+    *   *Usage*: `speech_to_text(path="recording.mp3")`
+*   **Speech-to-Speech**: Create a full conversational pipeline where the agent listens to an audio file, processes it (optionally transforming the text via LLM), and speaks back a response.
+    *   *Usage*: `speech_to_speech(path="input.wav", transform=true)`
+
+**Configuration**:
+These features use the Pollinations.ai API. An API key is required for some advanced features but the basic generation often works freely. To ensure reliability, add your Pollinations API key to your configuration:
+1.  Get a key from [Pollinations.ai](https://enter.pollinations.ai).
+
+
 ## Installation
 
 ### Option 1: Install via NPM (Recommended)

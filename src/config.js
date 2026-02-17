@@ -27,12 +27,14 @@ export async function getApiKey(provider) {
     if (provider === 'openai' && process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
     if (provider === 'gemini' && process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
     if (provider === 'compatible' && process.env.COMPATIBLE_API_KEY) return process.env.COMPATIBLE_API_KEY;
+    if (provider === 'pollination' && process.env.POLLINATIONS_KEY) return process.env.POLLINATIONS_KEY;
 
     // 2. Check Config File
     const config = await loadConfig();
     if (provider === 'openai') return config.openai_api_key;
     if (provider === 'gemini') return config.gemini_api_key;
     if (provider === 'compatible') return config.compatible_api_key;
+    if (provider === 'pollination') return config.pollination_api_key;
 
     return null;
 }

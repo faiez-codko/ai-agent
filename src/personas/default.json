@@ -51,7 +51,11 @@
     "memory_save",
     "memory_read",
     "memory_list",
-    "memory_search"
+    "memory_search",
+    "text_to_speech",
+    "speech_to_text",
+    "speech_to_speech",
+    "list_voices"
   ],
   "temperature": 0.7
 }
