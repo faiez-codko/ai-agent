@@ -4,7 +4,7 @@ import { runCommand } from './tools/shell.js';
 import { tools as toolImplementations, toolDefinitions } from './tools/index.js';
 import { loadPersona } from './personas/index.js';
 import { loadChatHistory, saveChatHistory } from './chatStorage.js';
-import { summarizeMemory } from './memory/summary.js';
+import { summarizeMemory, saveTaskState } from './memory/summary.js';
 import { loadWorkspaceContext, appendDailyMemory, appendError, pruneOldDailyMemory } from './memory/workspace.js';
 import { sendMessage as sendTelegramMessage } from './tools/telegram.js';
 import chalk from 'chalk';
@@ -77,6 +77,20 @@ export class Agent {
 
         // Prune old daily memory files on init
         try { pruneOldDailyMemory(7); } catch (e) { /* ignore */ }
+
+        // Clean up old overflow files (keep last 50)
+        try {
+            const overflowDir = path.join(process.cwd(), '.agent', 'overflow');
+            if (fs.existsSync(overflowDir)) {
+                const files = fs.readdirSync(overflowDir)
+                    .filter(f => f.startsWith('overflow_'))
+                    .sort()
+                    .reverse();
+                for (const file of files.slice(50)) {
+                    fs.unlinkSync(path.join(overflowDir, file));
+                }
+            }
+        } catch (e) { /* ignore */ }
 
         // Use a unique sub-directory for this agent's planning files if id is provided
         const agentDir = this.id !== 'default' ? `.agent/${this.id}` : '.agent';
@@ -167,7 +181,9 @@ NOTE: Ensure the directory \`${agentDir}\` exists before writing files.
         this.memory.push({ role: 'user', content: userMessage });
 
         // ─── Task Anchoring: Track the original goal ───
+        // Store the FULL user message as the raw goal
         this._currentTaskGoal = userMessage;
+        this._expandedTaskGoal = null; // Will be set after the first AI response
         this._toolCallCount = 0;
 
         // Check and summarize memory if needed
@@ -175,6 +191,7 @@ NOTE: Ensure the directory \`${agentDir}\` exists before writing files.
 
         let loopCount = 0;
         const MAX_LOOPS = 50;
+        const CHECKPOINT_INTERVAL = 30; // Force checkpoint every N tool calls
         let finalResponse = null;
 
         if (onUpdate) onUpdate({ type: 'thinking', message: 'Analyzing request...' });
@@ -242,6 +259,12 @@ NOTE: Ensure the directory \`${agentDir}\` exists before writing files.
                 });
                 if (response.content) {
                     finalResponse = response.content;
+                    // ─── Smart Task Anchor: Capture the AI's UNDERSTANDING of the task ───
+                    // After the first response, the AI has likely expanded "do A B C D" into specifics.
+                    // Save that expanded understanding for future anchors.
+                    if (!this._expandedTaskGoal && response.content.length > 50) {
+                        this._expandedTaskGoal = response.content.substring(0, 800);
+                    }
                 }
             } else if (response.content) {
                 this.memory.push({ role: 'assistant', content: response.content });
@@ -313,7 +336,7 @@ NOTE: Ensure the directory \`${agentDir}\` exists before writing files.
                         // Critical tools get a longer preview so the AI can still work with the data
                         const previewLen = isCritical ? 4000 : 400;
                         const preview = memoryContent.substring(0, previewLen);
-                        memoryContent = `[SYSTEM: Output offloaded (${memoryContent.length} chars) → ${filePath}\nPreview: ${preview}...\n(Use 'read_file' for full content)]`;
+                        memoryContent = `[SYSTEM: Full output saved to file (${memoryContent.length} chars). Below is a preview.\nFull path: ${filePath}\nTo read the full output, call: read_file({ path: "${filePath.replace(/\\/g, '/')}" })\n\nPreview:\n${preview}...]`;
 
                         console.log(chalk.yellow(`⚠️  Tool output offloaded to ${filename} (${memoryContent.length} chars)`));
                     } catch (err) {
@@ -329,16 +352,43 @@ NOTE: Ensure the directory \`${agentDir}\` exists before writing files.
                     content: memoryContent
                 });
 
-                // ─── Task Anchor Injection ───
-                // Every N tool calls, inject a reminder of the original goal
+                // ─── Smart Task Anchor Injection ───
+                // Every N tool calls, inject a reminder using the EXPANDED task understanding
                 if (this._toolCallCount > 0 && this._toolCallCount % this._taskAnchorInterval === 0 && this._currentTaskGoal) {
+                    // Use the expanded understanding if available, otherwise fall back to raw user message
+                    const goalText = this._expandedTaskGoal
+                        ? `Original request: "${this._currentTaskGoal.substring(0, 200)}"
+Your expanded understanding: ${this._expandedTaskGoal.substring(0, 600)}`
+                        : `"${this._currentTaskGoal}"`;
+
                     this.memory.push({
                         role: 'system',
-                        content: `[TASK ANCHOR — Reminder] Your CURRENT GOAL is: "${this._currentTaskGoal}"\nYou have made ${this._toolCallCount} tool calls. Stay focused. What is the next step toward completing this goal?`
+                        content: `[TASK ANCHOR — Reminder #${Math.floor(this._toolCallCount / this._taskAnchorInterval)}]
+${goalText}
+Tool calls so far: ${this._toolCallCount}. Stay focused. What is the NEXT step?`
                     });
                     console.log(chalk.magenta(`📌 Task anchor injected after ${this._toolCallCount} tool calls`));
                 }
+
+                // ─── Forced Checkpoint at CHECKPOINT_INTERVAL ───
+                // If we've done 30+ tool calls, save task state to survive potential summarization
+                if (this._toolCallCount > 0 && this._toolCallCount % CHECKPOINT_INTERVAL === 0) {
+                    try {
+                        saveTaskState(this.id, this._currentTaskGoal, this._toolCallCount, this.memory);
+                        console.log(chalk.blue(`💾 Checkpoint saved at ${this._toolCallCount} tool calls`));
+                    } catch (e) { /* ignore */ }
+                }
             }
+        }
+
+        // ─── Auto Workspace Logging ───
+        // If the task used 5+ tool calls, auto-log a summary to daily memory
+        if (this._toolCallCount >= 5 && this._currentTaskGoal) {
+            try {
+                const summary = `Task: "${this._currentTaskGoal.substring(0, 100)}" — Completed with ${this._toolCallCount} tool calls.`;
+                appendDailyMemory(summary);
+                console.log(chalk.gray(`📝 Auto-logged task to daily memory (${this._toolCallCount} tool calls)`));
+            } catch (e) { /* ignore */ }
         }
 
         if (onUpdate) onUpdate({ type: 'done' });

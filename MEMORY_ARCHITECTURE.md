@@ -1,166 +1,263 @@
-# Agent Memory & Context Architecture — Upgrade Guide
+# Agent Memory & Context Architecture — v3.0
 
-## What Changed (v2.0)
+## What Changed (v3.0)
 
-### Problem
-The agent was experiencing:
-1. **Hallucination and task drift** — after many tool calls, the model lost track of the original goal
-2. **Context window overflow** — tool outputs (file contents, command results) consumed 60%+ of context
-3. **No persistent knowledge** — every session started fresh, with no memory of past learnings
+### Problem (v2.0 → v3.0)
+After v2.0 improvements, the agent was STILL hallucinating after ~55 tool calls:
 
-### Root Causes
+```
+📌 Task anchor injected after 55 tool calls
+AI: null                                          ← model returned nothing
+⚠️  Memory usage high (~65239 tokens). Summarizing...
+Archived 274 messages                             ← old messages destroyed
+✅ Reduced from 289 to 17 messages
+AI: "What were A B C D again?"                    ← AMNESIA
+```
+
+### Root Causes & Fixes (v3.0)
+
 | Issue | Root Cause | Fix |
 |-------|-----------|-----|
-| Hallucination | Original task buried under 30+ tool outputs | **Task Anchoring** — re-inject goal every 5 tool calls |
-| Context overflow | Tool outputs stayed at full size forever | **Stale Output Compression** — outputs older than 15 messages auto-compressed |
-| No persistence | Relied on AI remembering to save to files | **Workspace Knowledge** — SOUL.md, TOOLS.md, MEMORY.md auto-loaded into every session |
-| Too many tools | 50+ tool calls before any summarization | **Earlier summarization** — threshold lowered from 80k→40k tokens |
-| Temperature too high | `temperature: 0.7` caused creative wandering | **Lowered to 0.5** for more focused, deterministic responses |
+| Vague task anchor | Anchor stored raw user text: `"do all those A B C D"` — meaningless without context | **Smart Task Anchor** — captures the AI's first expanded response as the anchor |
+| Summary killed task context | Summarizer compressed 274 msgs to 17, losing what A/B/C/D meant | **Pre-Summary Task Save** — writes full task state to `.agent/{id}/active_task.md` before summarizing |
+| Summary prompt too generic | "Summarize this conversation" lost critical task details | **Task-Aware Summary Prompt** — forces structured output: CURRENT TASK / COMPLETED / IN PROGRESS / KEY FACTS |
+| Post-summary amnesia | No task re-injection after summarization | **Active Task Injection** — after summary, re-injects the original request + tool call count |
+| No checkpoints | 55 tool calls with no state saved to disk | **Forced Checkpoints** — saves task state to file every 30 tool calls |
+| Agent doesn't save learnings | Workspace memory tools exist but AI never calls them | **Mandatory Save Triggers** — system prompt gives explicit WHEN+HOW examples |
+| Overflow message unclear | "Output offloaded to file" didn't tell AI how to read it | **Actionable Overflow** — gives exact `read_file({ path: "..." })` call |
+| Overflow directory grows forever | No cleanup of old overflow files | **Auto-Cleanup** — keeps only last 50 overflow files |
 
 ---
 
 ## Architecture Overview
 
-### Memory Layers (New)
+### Memory Layers
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    SYSTEM PROMPT                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
-│  │ SOUL.md  │  │ TOOLS.md │  │AGENTS.md │  (Identity)   │
-│  └──────────┘  └──────────┘  └──────────┘              │
-│  ┌──────────────────────┐  ┌─────────────────┐          │
-│  │     MEMORY.md        │  │ Daily Memory    │  (Facts)  │
-│  │  (Persistent Facts)  │  │ (YYYY-MM-DD.md) │          │
-│  └──────────────────────┘  └─────────────────┘          │
-│  ┌──────────────────────────────────────────┐           │
-│  │         Persona System Prompt            │  (Role)    │
-│  └──────────────────────────────────────────┘           │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    SYSTEM PROMPT                              │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                   │
+│  │ SOUL.md  │  │ TOOLS.md │  │AGENTS.md │  (Identity)        │
+│  └──────────┘  └──────────┘  └──────────┘                   │
+│  ┌──────────────────────┐  ┌─────────────────┐               │
+│  │     MEMORY.md        │  │ Daily Memory    │  (Facts)       │
+│  │  (Persistent Facts)  │  │ (YYYY-MM-DD.md) │               │
+│  └──────────────────────┘  └─────────────────┘               │
+│  ┌──────────────────────────────────────────┐                │
+│  │         Persona System Prompt            │  (Role)         │
+│  └──────────────────────────────────────────┘                │
+└──────────────────────────────────────────────────────────────┘
                           ▼
-┌─────────────────────────────────────────────────────────┐
-│                 CONVERSATION MEMORY                      │
-│                                                          │
-│  [User Message] ← Task Anchor tracks this               │
-│      ▼                                                   │
-│  [Tool Call #1] → [Tool Result (full)]                   │
-│  [Tool Call #2] → [Tool Result (full)]                   │
-│  ...                                                     │
-│  [Tool Call #5] → [Tool Result (full)]                   │
-│  [TASK ANCHOR: "Your goal is: <original request>"]       │  ← Injected
-│  [Tool Call #6] → [Tool Result (full)]                   │
-│  ...                                                     │
-│  [Older tool results] → [COMPRESSED to 150 chars]        │  ← Auto-compressed
-│                                                          │
-│  IF tokens > 40k → SUMMARIZE old messages               │
-│  IF tokens > 120k → FALLBACK: keep only last 10-20 msgs │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                 CONVERSATION MEMORY                           │
+│                                                               │
+│  [User: "do all those A B C D"]                              │
+│      ▼                                                        │
+│  [AI: "I'll handle: A=login, B=auth, C=DB, D=deploy"]       │
+│  ← _expandedTaskGoal captured here                           │
+│      ▼                                                        │
+│  [Tool Call #1] → [Tool Result (full)]                       │
+│  ...                                                          │
+│  [Tool Call #5] → [SMART ANCHOR with expanded understanding] │
+│  [Tool Call #6...#29] → working...                           │
+│  [Tool Call #30] → 💾 CHECKPOINT saved to active_task.md     │
+│  ...                                                          │
+│  [Tool Call #55] → tokens hit 40k → SUMMARIZE               │
+│     1. Save task state to active_task.md                     │
+│     2. Archive old messages to .agent/archive/               │
+│     3. Generate structured summary (TASK/DONE/NEXT/FACTS)    │
+│     4. Re-inject: [ACTIVE TASK] + original request           │
+│     5. Keep last 15 messages raw                             │
+│                                                               │
+│  [Older tool results] → [COMPRESSED to 150 chars]            │
+│                                                               │
+│  IF tokens > 40k → SUMMARIZE                                │
+│  IF tokens > 120k → FALLBACK: keep only last 10-20 msgs     │
+└──────────────────────────────────────────────────────────────┘
                           ▼
-┌─────────────────────────────────────────────────────────┐
-│               PERSISTENT STORAGE                         │
-│                                                          │
-│  SQLite DB (.agent/.ai-agent-chat.sqlite)               │
-│    └── agents / chat_sessions / chat (messages)          │
-│                                                          │
-│  Workspace Files (~/.agent/workspace/)                   │
-│    ├── SOUL.md        (identity + behavioral rules)      │
-│    ├── TOOLS.md       (tool usage patterns)              │
-│    ├── AGENTS.md      (delegation patterns)              │
-│    ├── MEMORY.md      (persistent facts)                 │
-│    ├── memory/                                           │
-│    │   └── YYYY-MM-DD.md (daily session logs)            │
-│    └── .learnings/                                       │
-│        ├── LEARNINGS.md  (insights)                      │
-│        ├── ERRORS.md     (error patterns)                │
-│        └── FEATURE_REQUESTS.md                           │
-│                                                          │
-│  Overflow Files (.agent/overflow/)                       │
-│    └── overflow_<timestamp>_<tool>.txt                   │
-│                                                          │
-│  Archive (.agent/archive/)                               │
-│    └── <agent>_<timestamp>.json                          │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│               PERSISTENT STORAGE                              │
+│                                                               │
+│  SQLite DB (.agent/.ai-agent-chat.sqlite)                    │
+│    └── agents / chat_sessions / chat (messages)              │
+│                                                               │
+│  Workspace Files (~/.agent/workspace/)                        │
+│    ├── SOUL.md        (identity + behavioral rules)          │
+│    ├── TOOLS.md       (tool usage patterns)                  │
+│    ├── AGENTS.md      (delegation patterns)                  │
+│    ├── MEMORY.md      (persistent facts)                     │
+│    ├── memory/                                                │
+│    │   └── YYYY-MM-DD.md (daily session logs)                │
+│    └── .learnings/                                            │
+│        ├── LEARNINGS.md  (insights)                          │
+│        ├── ERRORS.md     (error patterns)                    │
+│        └── FEATURE_REQUESTS.md                               │
+│                                                               │
+│  Task State (.agent/{agentId}/active_task.md)                │
+│    └── Survives summarization — contains original request,   │
+│        initial plan, recent tool activity, tool call count    │
+│                                                               │
+│  Overflow Files (.agent/overflow/)                            │
+│    └── overflow_<timestamp>_<tool>.txt (auto-cleaned, max 50)│
+│                                                               │
+│  Archive (.agent/archive/)                                    │
+│    └── <agent>_<timestamp>.json                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## New Files Created
+## Key Anti-Hallucination Mechanisms
 
+### 1. Smart Task Anchoring (NEW in v3.0)
+
+**Before (v2.0):** Anchor repeated the raw user message — useless for vague requests
+```
+[TASK ANCHOR] Your CURRENT GOAL is: "do all those A B C D"  ← USELESS
+```
+
+**After (v3.0):** Anchor captures the AI's first expanded understanding
+```
+[TASK ANCHOR — Reminder #3]
+Original request: "do all those A B C D"
+Your expanded understanding: I'll implement:
+A) Build the login page with email/password form
+B) Add JWT authentication middleware
+C) Set up PostgreSQL database with user table
+D) Deploy to Railway with CI/CD pipeline
+Tool calls so far: 15. Stay focused. What is the NEXT step?
+```
+
+### 2. Pre-Summarization Task Save
+
+Before compressing memory, the system saves a snapshot of the current task to disk:
+
+```
+.agent/primary/active_task.md
+├── # Active Task State
+├── ## Original Goal
+│   "do all those A B C D"
+├── ## Full Original Request  
+│   (complete first user message)
+├── ## Initial Plan/Understanding
+│   (AI's first response with expanded details)
+├── ## Recent Tool Activity (last 20 calls)
+│   - write_file: Created src/auth/login.tsx...
+│   - run_command: npm run build...
+└── ## Stats
+    - Total tool calls: 55
+    - Saved at: 2026-02-19T09:19:43Z
+```
+
+This file is written **before** the summarizer runs, so even if the summary is mediocre, the task context survives.
+
+### 3. Task-Aware Summarization Prompt
+
+The summarizer now generates a **structured** summary:
+
+```
+1. **CURRENT TASK**: Build 4 features (A: login, B: auth, C: DB, D: deploy)
+2. **COMPLETED SO FAR**: A done (login.tsx), B done (middleware)
+3. **IN PROGRESS / NEXT**: C — Setting up PostgreSQL schema
+4. **KEY FACTS**: Using Next.js 14, PostgreSQL, Railway for deploy
+5. **BLOCKED / ISSUES**: None
+```
+
+### 4. Post-Summarization Active Task Injection
+
+After summarization, the system injects:
+```
+[ACTIVE TASK — DO NOT FORGET]: "do all those A B C D"
+Full original request: "do all those A B C D" 
+You have made 55 tool calls so far. Continue from where you left off.
+```
+
+### 5. Forced Checkpoints (every 30 tool calls)
+
+At tool call #30, #60, #90, the system auto-saves `active_task.md` to disk — no AI decision needed.
+
+### 6. Workspace Memory — Mandatory Saves
+
+All personas now have a `## MANDATORY SAVES` section with explicit triggers:
+```
+Learned the project's tech stack? → workspace_save_fact('Project Facts', 'Uses Next.js 14')
+Fixed a tricky bug? → workspace_log_error('CORS error', 'Added middleware header')
+Found a data source? → workspace_save_fact('Data Sources', 'clutch.co has B2B profiles')
+```
+
+### 7. Tool Output Offloading (Improved)
+
+When a tool returns large output:
+```
+[SYSTEM: Full output saved to file (5000 chars). Below is a preview.
+Full path: C:/project/.agent/overflow/overflow_2026-02-19_read_file.txt
+To read the full output, call: read_file({ path: "C:/project/.agent/overflow/overflow_..." })
+
+Preview:
+const express = require('express');
+const app = express();
+...]
+```
+
+Auto-cleanup keeps only the 50 most recent overflow files.
+
+---
+
+## Multi-Agent System
+
+### Agents
+
+| Agent ID | Name | Role | Temp |
+|----------|------|------|------|
+| `default` | Polly (primary) | Orchestrator — delegates + handles general tasks | 0.5 |
+| `web_scraper` | scraper | Web scraping, data extraction, site audits | 0.3 |
+| `coder` | coder | Full-stack dev, debugging, architecture | 0.3 |
+| `b2b_leadgen` | leadgen | B2B lead research, contact scraping, list building | 0.4 |
+
+### Delegation Flow
+```
+User → Polly (primary)
+         ├── delegate_task("scraper", "Scrape prices from example.com")
+         ├── delegate_task("coder", "Refactor auth to use JWT")
+         └── delegate_task("leadgen", "Find 50 SaaS companies in US")
+```
+
+---
+
+## Files
+
+### New Files (v3.0)
 | File | Purpose |
 |------|---------|
-| `src/memory/workspace.js` | Core workspace memory system — loads, saves, prunes workspace files |
-| `src/tools/workspace_memory.js` | Tool definitions for agent to programmatically log learnings/errors/facts |
+| `src/personas/web_scraper.json` | Web scraping specialist persona |
+| `src/personas/coder.json` | Coding specialist persona |
+| `src/personas/b2b_leadgen.json` | B2B lead gen specialist persona |
 
-## Modified Files
-
+### Modified Files (v3.0)
 | File | Changes |
 |------|---------|
-| `src/agent.js` | Added task anchoring, workspace context loading, stale output compression, earlier summarization |
-| `src/memory/summary.js` | Lowered summarization threshold (80k→40k), daily memory logging on summarize |
-| `src/tools/index.js` | Registered workspace memory tools |
-| `src/personas/default.json` | Added workspace tools, updated system prompt, lowered temperature to 0.5 |
+| `src/agent.js` | Smart task anchor, forced checkpoints, overflow cleanup, actionable overflow message |
+| `src/memory/summary.js` | Pre-summary task save, task-aware summarization prompt, post-summary task injection |
+| `src/memory/workspace.js` | Updated AGENTS.md template for multi-agent system |
+| `src/personas/default.json` | Mandatory save triggers, delegation rules, offloaded output guidance |
+| `src/interactive.js` | Multi-agent initialization (scraper, coder, leadgen) |
+
+### Previous Files (v2.0)
+| File | Purpose |
+|------|---------|
+| `src/memory/workspace.js` | Workspace memory system — loads/saves/prunes workspace files |
+| `src/tools/workspace_memory.js` | Tool definitions for workspace logging |
 
 ---
 
-## Key Mechanisms
+## Tuning Parameters
 
-### 1. Task Anchoring
-Every 5 tool calls, a `[TASK ANCHOR]` system message is injected into the conversation:
-```
-[TASK ANCHOR — Reminder] Your CURRENT GOAL is: "Build a REST API for users"
-You have made 10 tool calls. Stay focused. What is the next step?
-```
-This prevents the agent from drifting after many tool calls.
-
-### 2. Stale Output Compression (Tool-Aware)
-Tool outputs that are more than 15 messages old are automatically compressed — **except for context-critical tools**:
-```
-[Stale output from read_file — compressed] const express = require('express'); const app = express()... (2847 chars, use read_file if needed)
-```
-
-**Context-Critical Tools (NEVER compressed):**
-- `browser_visit`, `browser_eval`, `browser_fetch`, `browser_screenshot`
-- `db_query`, `db_schema`
-- `analyze_image`, `desktop_screenshot`
-
-These tools also get a higher overflow threshold (8000 chars vs 2000) and longer previews (4000 chars vs 400) because tasks like web audits, scraping, and HTML analysis need the full content.
-
-**Non-critical tools** (read_file, list_files, run_command, etc.) are compressed aggressively since their outputs can easily be re-fetched.
-
-### 3. Workspace Knowledge Auto-Loading
-On every `agent.init()`, the system reads:
-- `SOUL.md` — behavioral guidelines
-- `TOOLS.md` — tool usage patterns and gotchas
-- `AGENTS.md` — delegation patterns
-- `MEMORY.md` — persistent project facts
-- Today's `memory/YYYY-MM-DD.md` — daily session log
-- Last 20 lines of `.learnings/LEARNINGS.md`
-
-These are injected into the system prompt as `═══ WORKSPACE KNOWLEDGE ═══`.
-
-### 4. Workspace Tools
-The agent can now programmatically update its knowledge:
-- `workspace_save_fact` — add to MEMORY.md (e.g., "This project uses TypeScript")
-- `workspace_log_learning` — log an insight
-- `workspace_log_error` — log an error pattern + solution
-- `workspace_daily_log` — log session progress
-
----
-
-## Customization
-
-### Editing SOUL.md
-Edit `~/.agent/workspace/SOUL.md` to change the agent's behavioral rules. This is loaded into every session automatically. Add project-specific rules here.
-
-### Editing TOOLS.md
-Edit `~/.agent/workspace/TOOLS.md` to add tool usage tips or document gotchas specific to your workflow.
-
-### Tuning Parameters
 In `src/memory/summary.js`:
 - `SUMMARY_THRESHOLD` — when to trigger summarization (default: 40000 tokens)
 - `MESSAGES_TO_KEEP` — how many recent messages to preserve (default: 15)
 
 In `src/agent.js`:
-- `_taskAnchorInterval` — how often to re-inject the task goal (default: every 5 tool calls)
-- `MAX_OUTPUT_LENGTH` — max tool output size before offloading (default: 2000 chars)
-- `staleThreshold` — how many recent messages keep full tool output (default: 15)
+- `_taskAnchorInterval` — how often to inject smart anchor (default: every 5 tool calls)
+- `CHECKPOINT_INTERVAL` — how often to force save task state (default: every 30 tool calls)
+- `MAX_OUTPUT_LENGTH` — max tool output before offloading (2000 chars normal, 8000 for critical tools)
+- `staleThreshold` — messages from end to keep full tool output (default: 15)
