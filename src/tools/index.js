@@ -13,13 +13,14 @@ import { ghToolDefinitions, ghTools } from './gh.js';
 import { emailToolDefinitions, emailTools } from './email.js';
 import { whatsappToolDefinitions, whatsappTools } from './whatsapp.js';
 import { audioToolDefinitions, audioTools } from './audio.js';
+import { workspaceToolDefinitions, workspaceMemoryTools } from './workspace_memory.js';
 import memoryTools from './memory.js';
 import fs from 'fs/promises';
 import path from 'path';
 
 const resolvePath = (filePath, cwd) => {
-    if (path.isAbsolute(filePath)) return filePath;
-    return path.resolve(cwd || process.cwd(), filePath);
+  if (path.isAbsolute(filePath)) return filePath;
+  return path.resolve(cwd || process.cwd(), filePath);
 };
 export const toolDefinitions = [
   {
@@ -195,8 +196,8 @@ export const toolDefinitions = [
       type: "object",
       properties: {
         sql: { type: "string", description: "SQL query string" },
-        params: { 
-          type: "array", 
+        params: {
+          type: "array",
           description: "Parameters for the query (optional)",
           items: {
             type: ["string", "number", "boolean", "null"]
@@ -277,7 +278,8 @@ export const toolDefinitions = [
   ...ghToolDefinitions,
   ...emailToolDefinitions,
   ...whatsappToolDefinitions,
-  ...audioToolDefinitions
+  ...audioToolDefinitions,
+  ...workspaceToolDefinitions
 ];
 
 export const tools = {
@@ -285,6 +287,7 @@ export const tools = {
   ...emailTools,
   ...whatsappTools,
   ...audioTools,
+  ...workspaceMemoryTools,
   ...browser_tools,
   ...db_tools,
   ...schedulerTools,
@@ -297,38 +300,38 @@ export const tools = {
   delegate_task,
   read_file: async ({ path: filePath }, { agent }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);
-    
+
     // Check file extension for images/binary
     const ext = path.extname(fullPath).toLowerCase();
     const binaryExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp', '.pdf', '.zip', '.exe', '.bin'];
     if (binaryExts.includes(ext)) {
-        return `Error: File ${path.basename(fullPath)} appears to be a binary or image file. Reading it as text will fail. Use 'analyze_image' for images or other specialized tools.`;
+      return `Error: File ${path.basename(fullPath)} appears to be a binary or image file. Reading it as text will fail. Use 'analyze_image' for images or other specialized tools.`;
     }
 
     // Check file size (limit to 100KB for text to be safe, though context window is larger, we want to avoid massive logs)
     try {
-        const stats = await fs.stat(fullPath);
-        if (stats.size > 100 * 1024) {
-             // Read only first 20KB
-             const handle = await fs.open(fullPath, 'r');
-             const buffer = Buffer.alloc(20000);
-             const { bytesRead } = await handle.read(buffer, 0, 20000, 0);
-             await handle.close();
-             return `Warning: File is large (${(stats.size/1024).toFixed(2)}KB). Showing first 20KB:\n\n${buffer.toString('utf8', 0, bytesRead)}\n\n... (truncated)`;
-        }
+      const stats = await fs.stat(fullPath);
+      if (stats.size > 100 * 1024) {
+        // Read only first 20KB
+        const handle = await fs.open(fullPath, 'r');
+        const buffer = Buffer.alloc(20000);
+        const { bytesRead } = await handle.read(buffer, 0, 20000, 0);
+        await handle.close();
+        return `Warning: File is large (${(stats.size / 1024).toFixed(2)}KB). Showing first 20KB:\n\n${buffer.toString('utf8', 0, bytesRead)}\n\n... (truncated)`;
+      }
     } catch (e) {
-        // Ignore stat errors, readFile will catch them
+      // Ignore stat errors, readFile will catch them
     }
 
     return await readFile(fullPath);
   },
   write_file: async ({ path: filePath, content }, { agent, confirmCallback }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);
-    
+
     if (agent?.safeMode) {
-        if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
-        const approved = await confirmCallback(`[SAFE MODE] Write to ${fullPath}?`);
-        if (!approved) return "Write cancelled by user.";
+      if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
+      const approved = await confirmCallback(`[SAFE MODE] Write to ${fullPath}?`);
+      if (!approved) return "Write cancelled by user.";
     }
 
     await writeFile(fullPath, content);
@@ -336,53 +339,53 @@ export const tools = {
   },
   update_file: async ({ path: filePath, search_text, replace_text }, { agent, confirmCallback }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);
-    
+
     if (agent?.safeMode) {
-        if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
-        const approved = await confirmCallback(`[SAFE MODE] Update ${fullPath}?`);
-        if (!approved) return "Update cancelled by user.";
+      if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
+      const approved = await confirmCallback(`[SAFE MODE] Update ${fullPath}?`);
+      if (!approved) return "Update cancelled by user.";
     }
 
     try {
-        const content = await readFile(fullPath);
-        if (content.includes(search_text)) {
-            const newContent = content.replace(search_text, replace_text);
-            await writeFile(fullPath, newContent);
-            return `Successfully updated ${fullPath}`;
-        } else {
-            return `Error: search_text not found in ${fullPath}`;
-        }
+      const content = await readFile(fullPath);
+      if (content.includes(search_text)) {
+        const newContent = content.replace(search_text, replace_text);
+        await writeFile(fullPath, newContent);
+        return `Successfully updated ${fullPath}`;
+      } else {
+        return `Error: search_text not found in ${fullPath}`;
+      }
     } catch (e) {
-        return `Error updating file: ${e.message}`;
+      return `Error updating file: ${e.message}`;
     }
   },
   delete_file: async ({ path: filePath }, { confirmCallback, agent }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);
     // Check if file exists first
     try {
-        await fs.access(fullPath);
+      await fs.access(fullPath);
     } catch {
-        return `File ${fullPath} does not exist.`;
+      return `File ${fullPath} does not exist.`;
     }
 
     if (agent?.safeMode || confirmCallback) {
-        if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
-        const confirmed = await confirmCallback(`Are you sure you want to DELETE ${fullPath}?`);
-        if (!confirmed) {
-            return "Deletion cancelled by user.";
-        }
+      if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
+      const confirmed = await confirmCallback(`Are you sure you want to DELETE ${fullPath}?`);
+      if (!confirmed) {
+        return "Deletion cancelled by user.";
+      }
     }
-    
+
     await fs.unlink(fullPath);
     return `Successfully deleted ${fullPath}`;
   },
   run_command: async ({ command }, { agent, confirmCallback }) => {
     const cwd = agent?.cwd || process.cwd();
-    
+
     if (agent?.safeMode) {
-        if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
-        const approved = await confirmCallback(`[SAFE MODE] Execute command?\n${command}`);
-        if (!approved) return "Command execution cancelled by user.";
+      if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
+      const approved = await confirmCallback(`[SAFE MODE] Execute command?\n${command}`);
+      if (!approved) return "Command execution cancelled by user.";
     }
 
     // We execute the command in the agent's cwd
@@ -394,27 +397,27 @@ export const tools = {
     const cmdWithCwd = `cd "${cwd}" && ${command}`;
     const { stdout, stderr, error } = await runCommand(cmdWithCwd);
     if (error) {
-        return `Error: ${stderr || error.message}`;
+      return `Error: ${stderr || error.message}`;
     }
     return stdout || stderr || "Command executed with no output.";
   },
   schedule_task: async ({ cron_expression, command, id }, { agent, confirmCallback }) => {
     const expr = cron_expression;
     if (!cron.validate(expr)) {
-        return `Invalid cron expression: ${expr}`;
+      return `Invalid cron expression: ${expr}`;
     }
     const baseId = id && typeof id === 'string' ? id : null;
     const taskId = baseId && !scheduledTasks.has(baseId)
-        ? baseId
-        : `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      ? baseId
+      : `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     if (scheduledTasks.has(taskId)) {
-        return `Task with id ${taskId} already exists.`;
+      return `Task with id ${taskId} already exists.`;
     }
     const cwd = agent?.cwd || process.cwd();
     if (agent?.safeMode) {
-        if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
-        const approved = await confirmCallback(`[SAFE MODE] Schedule command?\n${command}\nCron: ${expr}`);
-        if (!approved) return "Task scheduling cancelled by user.";
+      if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
+      const approved = await confirmCallback(`[SAFE MODE] Schedule command?\n${command}\nCron: ${expr}`);
+      if (!approved) return "Task scheduling cancelled by user.";
     }
     const job = createTaskJob(taskId, expr, command, cwd);
     scheduledTasks.set(taskId, { job, command, cron_expression: expr, cwd });
@@ -423,18 +426,18 @@ export const tools = {
   },
   list_scheduled_tasks: async () => {
     if (scheduledTasks.size === 0) {
-        return "No scheduled tasks.";
+      return "No scheduled tasks.";
     }
     const lines = [];
     for (const [id, task] of scheduledTasks.entries()) {
-        lines.push(`${id} | cron: ${task.cron_expression} | command: ${task.command} | cwd: ${task.cwd}`);
+      lines.push(`${id} | cron: ${task.cron_expression} | command: ${task.command} | cwd: ${task.cwd}`);
     }
     return lines.join('\n');
   },
   cancel_scheduled_task: async ({ id }) => {
     const task = scheduledTasks.get(id);
     if (!task) {
-        return `Task ${id} not found.`;
+      return `Task ${id} not found.`;
     }
     task.job.stop();
     scheduledTasks.delete(id);
@@ -447,27 +450,27 @@ export const tools = {
     return files.join('\n');
   },
   read_dir: async ({ path: dirPath = '.' }, { agent }) => {
-      const fullPath = resolvePath(dirPath, agent?.cwd);
-      try {
-          const files = await fs.readdir(fullPath);
-          return `Contents of ${fullPath}:\n${files.join('\n')}`;
-      } catch (e) {
-          return `Error reading directory: ${e.message}`;
-      }
+    const fullPath = resolvePath(dirPath, agent?.cwd);
+    try {
+      const files = await fs.readdir(fullPath);
+      return `Contents of ${fullPath}:\n${files.join('\n')}`;
+    } catch (e) {
+      return `Error reading directory: ${e.message}`;
+    }
   },
   change_directory: async ({ path: dirPath }, { agent }) => {
-      const fullPath = resolvePath(dirPath, agent?.cwd);
-      try {
-          const stats = await fs.stat(fullPath);
-          if (!stats.isDirectory()) {
-              return `Error: ${fullPath} is not a directory.`;
-          }
-          if (agent) {
-              agent.cwd = fullPath;
-          }
-          return `Changed directory to ${fullPath}`;
-      } catch (e) {
-          return `Error changing directory: ${e.message}`;
+    const fullPath = resolvePath(dirPath, agent?.cwd);
+    try {
+      const stats = await fs.stat(fullPath);
+      if (!stats.isDirectory()) {
+        return `Error: ${fullPath} is not a directory.`;
       }
+      if (agent) {
+        agent.cwd = fullPath;
+      }
+      return `Changed directory to ${fullPath}`;
+    } catch (e) {
+      return `Error changing directory: ${e.message}`;
+    }
   }
 };

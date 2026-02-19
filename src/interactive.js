@@ -16,29 +16,25 @@ export async function startInteractiveMode() {
 
   const manager = new AgentManager();
   await manager.init();
-  
-  // Initialize default agents only if no agents loaded
+
+  // Initialize default agent + specialists if no agents loaded
   if (manager.agents.size === 0) {
-      console.log(chalk.gray('Initializing default agents...'));
-      await manager.createAgent('default', 'primary');
-      
-      const defaultRoles = [
-          { id: 'project_manager', name: 'pm' },
-          { id: 'team_lead', name: 'lead' },
-          { id: 'senior_engineer', name: 'senior' },
-          { id: 'junior_engineer', name: 'junior' },
-          { id: 'testing_engineer', name: 'qa' },
-          { id: 'database_manager', name: 'db' },
-          { id: 'document_maker', name: 'docs' }
-      ];
-      
-      for (const role of defaultRoles) {
-          try {
-              await manager.createAgent(role.id, role.name);
-          } catch (e) {
-              // Ignore if persona file missing
-          }
+    console.log(chalk.gray('Initializing agents...'));
+    await manager.createAgent('default', 'primary');
+
+    const specialists = [
+      { id: 'web_scraper', name: 'scraper' },
+      { id: 'coder', name: 'coder' },
+      { id: 'b2b_leadgen', name: 'leadgen' }
+    ];
+
+    for (const spec of specialists) {
+      try {
+        await manager.createAgent(spec.id, spec.name);
+      } catch (e) {
+        console.error(chalk.yellow(`⚠️  Could not create agent '${spec.name}': ${e.message}`));
       }
+    }
   }
 
   while (true) {
@@ -64,31 +60,31 @@ export async function startInteractiveMode() {
       const spinner = ora('Thinking...').start();
       try {
         const response = await activeAgent.chat(trimmedInput, async (message) => {
-             // Pause spinner to ask for confirmation
-             spinner.stop();
-             const { confirm } = await inquirer.prompt([{
-                 type: 'confirm',
-                 name: 'confirm',
-                 message: chalk.yellow(message),
-                 default: false
-             }]);
-             spinner.start();
-             return confirm;
+          // Pause spinner to ask for confirmation
+          spinner.stop();
+          const { confirm } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'confirm',
+            message: chalk.yellow(message),
+            default: false
+          }]);
+          spinner.start();
+          return confirm;
         });
         spinner.stop();
         console.log(chalk.green('AI: ') + response);
 
         // Audio Generation
         try {
-            const config = await loadConfig();
-            if (config.audio_enabled) {
-                const audioPath = await generateAudio(response, config.audio_voice);
-                if (audioPath) {
-                    console.log(chalk.gray(`Audio response generated: ${audioPath}`));
-                }
+          const config = await loadConfig();
+          if (config.audio_enabled) {
+            const audioPath = await generateAudio(response, config.audio_voice);
+            if (audioPath) {
+              console.log(chalk.gray(`Audio response generated: ${audioPath}`));
             }
+          }
         } catch (err) {
-            console.error(chalk.yellow('Failed to generate audio response.'));
+          console.error(chalk.yellow('Failed to generate audio response.'));
         }
 
         console.log('');
@@ -126,40 +122,40 @@ async function handleCommand(inputLine, manager) {
         const agents = manager.listAgents();
         console.log(chalk.bold('\nActive Agents:'));
         agents.forEach((a, index) => {
-            const active = a.id === manager.activeAgentId ? '*' : ' ';
-            const activeLabel = active === '*' ? chalk.green('(Active)') : '';
-            console.log(` ${index + 1}. ${a.name} ( ${chalk.cyan(a.id)} ) : ${chalk.gray(a.description)} ${activeLabel}`);
+          const active = a.id === manager.activeAgentId ? '*' : ' ';
+          const activeLabel = active === '*' ? chalk.green('(Active)') : '';
+          console.log(` ${index + 1}. ${a.name} ( ${chalk.cyan(a.id)} ) : ${chalk.gray(a.description)} ${activeLabel}`);
         });
         console.log('');
         break;
       case '/create':
-          if (args.length < 2) {
-              const personas = await manager.listAvailablePersonas();
-              console.log(chalk.yellow(`Usage: /create <persona> [name]`));
-              console.log(`Available personas: ${personas.join(', ')}`);
-          } else {
-              const persona = args[1];
-              const name = args[2] || null;
-              try {
-                  const newAgent = await manager.createAgent(persona, name);
-                  console.log(chalk.green(`Created agent ${newAgent.name}`));
-                  manager.setActiveAgent(newAgent.name);
-              } catch (e) {
-                  console.error(chalk.red(e.message));
-              }
+        if (args.length < 2) {
+          const personas = await manager.listAvailablePersonas();
+          console.log(chalk.yellow(`Usage: /create <persona> [name]`));
+          console.log(`Available personas: ${personas.join(', ')}`);
+        } else {
+          const persona = args[1];
+          const name = args[2] || null;
+          try {
+            const newAgent = await manager.createAgent(persona, name);
+            console.log(chalk.green(`Created agent ${newAgent.name}`));
+            manager.setActiveAgent(newAgent.name);
+          } catch (e) {
+            console.error(chalk.red(e.message));
           }
-          break;
+        }
+        break;
       case '/switch':
-          if (args.length < 2) {
-              console.log(chalk.yellow('Usage: /switch <agent_name>'));
+        if (args.length < 2) {
+          console.log(chalk.yellow('Usage: /switch <agent_name>'));
+        } else {
+          if (manager.setActiveAgent(args[1])) {
+            console.log(chalk.green(`Switched to ${args[1]}`));
           } else {
-              if (manager.setActiveAgent(args[1])) {
-                  console.log(chalk.green(`Switched to ${args[1]}`));
-              } else {
-                  console.error(chalk.red(`Agent ${args[1]} not found.`));
-              }
+            console.error(chalk.red(`Agent ${args[1]} not found.`));
           }
-          break;
+        }
+        break;
       case '/read':
         if (args.length < 2) {
           console.log(chalk.red('Usage: /read <file> [query]'));
@@ -170,18 +166,18 @@ async function handleCommand(inputLine, manager) {
         }
         break;
       case '/research':
-          if (args.length < 2) {
-            console.log(chalk.red('Usage: /research <directory>'));
-          } else {
-            const dir = args[1];
-            const spinner = ora(`Researching directory ${dir}...`).start();
-            const result = await agent.researchDirectory(dir);
-            spinner.stop();
-            console.log(chalk.blue.bold(`\nResearch Result for ${dir}:\n`));
-            console.log(result);
-            console.log('');
-          }
-          break;
+        if (args.length < 2) {
+          console.log(chalk.red('Usage: /research <directory>'));
+        } else {
+          const dir = args[1];
+          const spinner = ora(`Researching directory ${dir}...`).start();
+          const result = await agent.researchDirectory(dir);
+          spinner.stop();
+          console.log(chalk.blue.bold(`\nResearch Result for ${dir}:\n`));
+          console.log(result);
+          console.log('');
+        }
+        break;
       case '/clear':
         await clearChatHistory(agent.id);
         agent.memory = [];
@@ -189,29 +185,29 @@ async function handleCommand(inputLine, manager) {
         console.log(chalk.yellow('Memory cleared.'));
         break;
       case '/update':
-          if (args.length < 2) {
-             console.log(chalk.red('Usage: /update <file> [instruction...]'));
-          } else {
-             const file = args[1];
-             const instruction = args.slice(2).join(' ');
-             await update(file, instruction, agent);
-          }
-          break;
+        if (args.length < 2) {
+          console.log(chalk.red('Usage: /update <file> [instruction...]'));
+        } else {
+          const file = args[1];
+          const instruction = args.slice(2).join(' ');
+          await update(file, instruction, agent);
+        }
+        break;
       case '/fix':
-          if (args.length < 2) {
-             console.log(chalk.red('Usage: /fix <file>'));
-          } else {
-             await fix(args[1], agent);
-          }
-          break;
+        if (args.length < 2) {
+          console.log(chalk.red('Usage: /fix <file>'));
+        } else {
+          await fix(args[1], agent);
+        }
+        break;
       case '/run':
-           if (args.length < 2) {
-              console.log(chalk.red('Usage: /run <instruction>'));
-           } else {
-              const instruction = args.slice(1).join(' ');
-              await run(instruction, agent);
-           }
-           break;
+        if (args.length < 2) {
+          console.log(chalk.red('Usage: /run <instruction>'));
+        } else {
+          const instruction = args.slice(1).join(' ');
+          await run(instruction, agent);
+        }
+        break;
       case '/history':
         console.log(chalk.bold('\n--- Agent Memory Dump ---'));
         console.log(JSON.stringify(agent.memory, null, 2));

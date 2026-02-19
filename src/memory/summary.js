@@ -1,10 +1,11 @@
 import { saveChatHistory } from '../chatStorage.js';
+import { appendDailyMemory } from './workspace.js';
 import chalk from 'chalk';
 
 // Constants
 const MAX_CONTEXT_TOKENS = 120000; // Safe limit for GPT-4o (128k context)
-const SUMMARY_THRESHOLD = 80000; // Trigger summary when we hit this
-const MESSAGES_TO_KEEP = 10; // Keep last N messages raw
+const SUMMARY_THRESHOLD = 40000; // Trigger summary much earlier (was 80k) to prevent drift
+const MESSAGES_TO_KEEP = 15; // Keep last N messages raw (was 10)
 const TOKEN_ESTIMATE_CHAR = 4; // 1 token ~= 4 chars
 
 function estimateTokens(messages) {
@@ -18,7 +19,7 @@ function estimateTokens(messages) {
 
 export async function summarizeMemory(agent) {
     const totalTokens = estimateTokens(agent.memory);
-    
+
     if (totalTokens < SUMMARY_THRESHOLD) {
         return false;
     }
@@ -31,7 +32,7 @@ export async function summarizeMemory(agent) {
     // - Last MESSAGES_TO_KEEP messages
     // We summarize:
     // - Everything in between
-    
+
     // Find system prompt
     let systemPromptIdx = -1;
     if (agent.memory.length > 0 && agent.memory[0].role === 'system') {
@@ -40,7 +41,7 @@ export async function summarizeMemory(agent) {
 
     const startIndex = systemPromptIdx + 1;
     const endIndex = Math.max(startIndex, agent.memory.length - MESSAGES_TO_KEEP);
-    
+
     if (startIndex >= endIndex) {
         console.log(chalk.gray("Not enough messages to summarize yet."));
         return false;
@@ -74,7 +75,7 @@ export async function summarizeMemory(agent) {
         `;
 
         const summaryResponse = await agent.provider.generate(summaryPrompt, "You are a helpful assistant that summarizes technical conversations.");
-        
+
         const summaryMessage = {
             role: 'system',
             content: `[PREVIOUS CONVERSATION SUMMARY]:\n${summaryResponse}\n[END SUMMARY]`
@@ -86,18 +87,19 @@ export async function summarizeMemory(agent) {
             newMemory.push(agent.memory[0]);
         }
         newMemory.push(summaryMessage);
-        
-        // If there was already a summary in the "to summarize" block, it gets rolled into the new summary.
-        // If there were other system messages (like persona updates), we might lose them if we aren't careful.
-        // For simplicity, we assume one main system prompt at top.
 
         newMemory.push(...messagesToKeep);
-        
+
         agent.memory = newMemory;
-        
+
         // Save the compacted memory
         await saveChatHistory(agent.id, agent.memory, agent);
-        
+
+        // Log summarization event to daily workspace memory
+        try {
+            appendDailyMemory(`Memory summarized for agent ${agent.id}: ${messagesToSummarize.length} messages compressed. Key topics: ${summaryResponse.substring(0, 200)}...`);
+        } catch (e) { /* ignore */ }
+
         console.log(chalk.green(`✅ Memory summarized. Reduced from ${messagesToSummarize.length + messagesToKeep.length} to ${newMemory.length} messages.`));
         return true;
 
@@ -110,13 +112,13 @@ export async function summarizeMemory(agent) {
 async function archiveMessages(agentId, messages) {
     const fs = (await import('fs/promises')).default;
     const path = (await import('path')).default;
-    
+
     const archiveDir = path.join(process.cwd(), '.agent', 'archive');
     await fs.mkdir(archiveDir, { recursive: true });
-    
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = path.join(archiveDir, `${agentId}_${timestamp}.json`);
-    
+
     await fs.writeFile(filename, JSON.stringify(messages, null, 2));
     console.log(chalk.gray(`Archived ${messages.length} messages to ${filename}`));
 }
