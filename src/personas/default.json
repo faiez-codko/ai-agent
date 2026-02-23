@@ -49,6 +49,8 @@
     "list_emails",
     "whatsapp_send_message",
     "whatsapp_send_media",
+    "mcp_list_tools",
+    "mcp_call_tool",
     "memory_save",
     "memory_read",
     "memory_list",

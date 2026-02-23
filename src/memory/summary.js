@@ -49,7 +49,7 @@ function saveTaskState(agentId, taskGoal, toolCallCount, memory) {
         if (assistantMessages.length > 0) {
             const firstResponse = assistantMessages[0].content;
             if (firstResponse && firstResponse.length > 50) {
-                taskState += `## Initial Plan/Understanding\n${firstResponse.substring(0, 2000)}\n\n`;
+                taskState += `## Initial Plan/Understanding\n${firstResponse.substring(0, 5000)}\n\n`;
             }
         }
 
@@ -59,7 +59,7 @@ function saveTaskState(agentId, taskGoal, toolCallCount, memory) {
             .slice(-20)
             .map(m => {
                 const name = m.name || 'unknown';
-                const preview = m.content.substring(0, 100).replace(/\n/g, ' ');
+                const preview = m.content.substring(0, 5000).replace(/\n/g, ' ');
                 return `- ${name}: ${preview}`;
             });
 

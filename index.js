@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import { Command } from 'commander';
-import { setup, read, update, fix, run, web, integrationList, integrationSetup } from './src/commands.js';
+import { setup, read, update, fix, run, web, integrationList, integrationSetup, mcpList, mcpInstall, mcpEnable, mcpDisable, mcpRemove, call } from './src/commands.js';
 import { startInteractiveMode } from './src/interactive.js';
 import chalk from 'chalk';
 import path from 'path';
@@ -64,6 +64,12 @@ if (process.argv.length <= 2) {
     .description('Start the web interface')
     .action(web);
 
+  program
+    .command('call <target>')
+    .description('Call a tool, MCP tool, or another agent')
+    .option('--payload <json>', 'JSON payload for the call')
+    .action(call);
+
   const integration = program.command('integration').description('Manage integrations');
 
   integration
@@ -75,6 +81,36 @@ if (process.argv.length <= 2) {
     .command('setup <name>')
     .description('Setup a specific integration')
     .action(integrationSetup);
+
+  const mcp = program.command('mcp').description('Manage MCP servers');
+
+  mcp
+    .command('list')
+    .description('List installed MCP servers')
+    .action(mcpList);
+
+  mcp
+    .command('install <name> <command>')
+    .description('Install an MCP server')
+    .option('--args <args>', 'JSON array or space-separated args')
+    .option('--env <env>', 'JSON object of environment variables')
+    .option('--disabled', 'Install server disabled')
+    .action(mcpInstall);
+
+  mcp
+    .command('enable <name>')
+    .description('Enable an MCP server')
+    .action(mcpEnable);
+
+  mcp
+    .command('disable <name>')
+    .description('Disable an MCP server')
+    .action(mcpDisable);
+
+  mcp
+    .command('remove <name>')
+    .description('Remove an MCP server')
+    .action(mcpRemove);
 
   program.parse();
 }

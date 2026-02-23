@@ -3,11 +3,15 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { saveConfig, loadConfig } from './config.js';
 import { Agent } from './agent.js';
+import { AgentManager } from './agentManager.js';
 import { writeFile, readFile } from './tools/fs.js';
 import { runCommand } from './tools/shell.js';
 import * as Diff from 'diff';
 import { webUiTools } from './tools/web_ui.js';
+import { tools, toolDefinitions } from './tools/index.js';
+import { routeToolCall } from './tools/router.js';
 import { listIntegrations as listInt, setupIntegration as setupInt } from './integrations/index.js';
+import { installMcpServer, listMcpServers, removeMcpServer, setMcpServerEnabled } from './mcp/index.js';
 
 export async function web() {
   const spinner = ora('Starting web interface...').start();
@@ -451,4 +455,87 @@ export function integrationList() {
 
 export async function integrationSetup(name) {
     await setupInt(name);
+}
+
+const parseJsonOption = (value, fallback) => {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
+
+const parseArgsOption = (value) => {
+  if (!value) return [];
+  const parsed = parseJsonOption(value, []);
+  if (Array.isArray(parsed)) return parsed;
+  if (typeof parsed === 'string') return parsed.split(/\s+/).filter(Boolean);
+  return [];
+};
+
+export async function mcpList() {
+  const servers = await listMcpServers();
+  const names = Object.keys(servers);
+  if (!names.length) {
+    console.log(chalk.yellow('No MCP servers installed.'));
+    return;
+  }
+  console.log(chalk.bold('\nMCP Servers:\n'));
+  names.forEach(name => {
+    const server = servers[name];
+    const status = server.enabled === false ? 'disabled' : 'enabled';
+    console.log(`${chalk.green(name)} | ${status} | ${server.command}`);
+  });
+  console.log('');
+}
+
+export async function mcpInstall(name, command, options) {
+  const args = parseArgsOption(options?.args);
+  const env = parseJsonOption(options?.env, {});
+  const enabled = !options?.disabled;
+  await installMcpServer({ name, command, args, env, enabled });
+  console.log(chalk.green(`MCP server '${name}' installed.`));
+}
+
+export async function mcpEnable(name) {
+  await setMcpServerEnabled(name, true);
+  console.log(chalk.green(`MCP server '${name}' enabled.`));
+}
+
+export async function mcpDisable(name) {
+  await setMcpServerEnabled(name, false);
+  console.log(chalk.yellow(`MCP server '${name}' disabled.`));
+}
+
+export async function mcpRemove(name) {
+  await removeMcpServer(name);
+  console.log(chalk.green(`MCP server '${name}' removed.`));
+}
+
+export async function call(target, options) {
+  const payload = parseJsonOption(options?.payload, {});
+  const manager = new AgentManager();
+  await manager.init();
+  if (manager.agents.size === 0) {
+    await manager.createAgent('default', 'primary');
+  }
+  const agent = manager.getActiveAgent();
+  try {
+    const result = await routeToolCall({
+      target,
+      payload,
+      tools,
+      toolDefinitions,
+      agent
+    });
+    if (typeof result === 'string') {
+      console.log(result);
+    } else {
+      console.log(JSON.stringify(result, null, 2));
+    }
+  } catch (error) {
+    console.error(chalk.red(error.message));
+    process.exit(1);
+  }
 }

@@ -15,6 +15,7 @@ import { whatsappToolDefinitions, whatsappTools } from './whatsapp.js';
 import { audioToolDefinitions, audioTools } from './audio.js';
 import { workspaceToolDefinitions, workspaceMemoryTools } from './workspace_memory.js';
 import memoryTools from './memory.js';
+import { listAllMcpTools, callMcp } from '../mcp/index.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -123,6 +124,27 @@ export const toolDefinitions = [
         instruction: { type: "string", description: "The detailed instruction or task for the agent." }
       },
       required: ["target_agent_id", "instruction"]
+    }
+  },
+  {
+    name: "mcp_list_tools",
+    description: "List tools available from all enabled MCP servers.",
+    parameters: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
+    name: "mcp_call_tool",
+    description: "Call a tool exposed by an MCP server.",
+    parameters: {
+      type: "object",
+      properties: {
+        server: { type: "string", description: "MCP server name" },
+        tool: { type: "string", description: "Tool name to call" },
+        args: { type: "object", description: "Arguments for the tool" }
+      },
+      required: ["server", "tool"]
     }
   },
   {
@@ -298,6 +320,18 @@ export const tools = {
   ...githubTools,
   ...ghTools,
   delegate_task,
+  mcp_list_tools: async () => {
+    const results = await listAllMcpTools();
+    if (!results.length) return "No MCP servers enabled.";
+    return results.map(entry => {
+      const lines = entry.tools.map(tool => `- ${tool.name}${tool.description ? `: ${tool.description}` : ''}`);
+      return `Server: ${entry.server}\n${lines.join('\n')}`;
+    }).join('\n\n');
+  },
+  mcp_call_tool: async ({ server, tool, args }) => {
+    const result = await callMcp(server, tool, args || {});
+    return typeof result === 'string' ? result : JSON.stringify(result);
+  },
   read_file: async ({ path: filePath }, { agent }) => {
     const fullPath = resolvePath(filePath, agent?.cwd);
 

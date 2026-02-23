@@ -24,6 +24,8 @@
         "gh_pr_create",
         "gh_pr_list",
         "gh_file_content",
+        "mcp_list_tools",
+        "mcp_call_tool",
         "memory_save",
         "memory_read",
         "memory_search",

@@ -26,6 +26,37 @@ A powerful, multi-personality AI agent for your terminal. This tool allows you t
 *   **Safe Mode**: Toggleable protection against automatic file deletion or command execution.
 *   **Global Access**: Run `ai-agent` from anywhere.
 
+## Major Roadmap: MCP & Agent-to-Agent Integrations
+
+### Context
+You requested two major features: (1) allow installing MCP so the agent can access more tools, and (2) allow an agent to call another agent or integration with a command like `agent call sendEmail --payload { "email": "demo@email.com" }`, and later enable all kinds of integrations.
+
+### Ideal Solution
+*   **MCP Tool Marketplace**: A first-class plugin system where MCP servers can be installed, listed, enabled, disabled, and scoped per agent persona.
+*   **Unified Invocation API**: A single command path for calling tools, integrations, or other agents with strong payload validation and permission gating.
+*   **Secure Capability Model**: Each agent and MCP tool declares explicit permissions (filesystem, network, shell, integrations), with Safe Mode enforcement.
+*   **Extensible Integrations**: A registry where new integrations (email, CRM, webhooks, DB, etc.) can be added with consistent schemas.
+
+### Implementation Approach
+1.  **MCP Manager**: Add an MCP registry, installer, and runtime bridge that can discover MCP servers and expose their tools as agent-callable functions.
+2.  **Tool Routing Layer**: Introduce a central router that can resolve a call to either MCP tools, internal tools, integrations, or another agent.
+3.  **Schema Validation**: Define JSON schemas for tool payloads and validate inputs before execution.
+4.  **Agent-to-Agent Calls**: Add a command that dispatches tasks to another agent with structured payloads and a return channel.
+5.  **Integration Registry**: Convert existing integrations to a registry-backed system with metadata, permissions, and schemas.
+
+### Example Call
+```bash
+agent call sendEmail --payload '{ "email": "demo@email.com" }'
+```
+
+### Checklist
+- [x] Capture MCP and agent-to-agent requirements in README
+- [ ] Add MCP registry and installer
+- [ ] Expose MCP tools via the tool router
+- [ ] Implement payload schema validation
+- [ ] Add agent-to-agent call command with response handling
+- [ ] Migrate integrations to registry format
+
 ## 🧠 Memory & Context Optimization
 
 ### 1. Unlimited Persistent Memory

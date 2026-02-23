@@ -18,6 +18,8 @@
         "browser_fetch",
         "browser_screenshot",
         "analyze_image",
+        "mcp_list_tools",
+        "mcp_call_tool",
         "memory_save",
         "memory_read",
         "memory_search",
