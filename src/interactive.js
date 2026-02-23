@@ -22,20 +22,21 @@ export async function startInteractiveMode() {
   if (manager.agents.size === 0) {
     console.log(chalk.gray('Initializing agents...'));
     await manager.createAgent('default', 'primary');
+  }
 
-    try {
-      const skills = await listPersonas();
-      for (const skill of skills) {
-        if (skill.id === 'default') continue;
-        try {
+  // Always sync available skills as agents
+  try {
+    const skills = await listPersonas();
+    for (const skill of skills) {
+      if (skill.id === 'default') continue;
+      try {
         await manager.createAgent(skill.id, skill.id);
       } catch (e) {
         console.error(chalk.yellow(`⚠️  Could not create agent '${skill.name}': ${e.message}`));
       }
     }
-    } catch (e) {
-      console.error(chalk.red(`Failed to load skills: ${e.message}`));
-    }
+  } catch (e) {
+    console.error(chalk.red(`Failed to load skills: ${e.message}`));
   }
 
   while (true) {
