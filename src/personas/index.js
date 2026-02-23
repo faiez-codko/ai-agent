@@ -117,3 +117,23 @@ export async function savePersona(persona) {
     await fs.writeFile(filePath, persona.systemPrompt);
     return persona;
 }
+
+export async function addSkillFromUrl(url, name) {
+    await ensureSkillsDir();
+    try {
+        console.log(`Fetching skill from ${url}...`);
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+        }
+        const content = await response.text();
+        
+        // Basic check: if it's a GitHub repo URL (not raw), warn the user or try to fetch raw?
+        // For now, just save the content.
+        
+        await savePersona({ id: name, systemPrompt: content });
+        return { id: name, size: content.length };
+    } catch (error) {
+        throw new Error(`Failed to add skill: ${error.message}`);
+    }
+}

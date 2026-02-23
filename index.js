@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import { Command } from 'commander';
-import { setup, read, update, fix, run, web, integrationList, integrationSetup, mcpList, mcpInstall, mcpEnable, mcpDisable, mcpRemove, call } from './src/commands.js';
+import { setup, read, update, fix, run, web, integrationList, integrationSetup, mcpList, mcpInstall, mcpEnable, mcpDisable, mcpRemove, call, skillsAdd, skillsList } from './src/commands.js';
 import { startInteractiveMode } from './src/interactive.js';
 import chalk from 'chalk';
 import path from 'path';
@@ -111,6 +111,19 @@ if (process.argv.length <= 2) {
     .command('remove <name>')
     .description('Remove an MCP server')
     .action(mcpRemove);
+
+  const skills = program.command('skills').description('Manage Agent Skills');
+
+  skills
+    .command('add <url>')
+    .description('Add a skill from a URL')
+    .option('--skill <name>', 'Name of the skill to create')
+    .action(skillsAdd);
+
+  skills
+    .command('list')
+    .description('List available skills')
+    .action(skillsList);
 
   program.parse();
 }

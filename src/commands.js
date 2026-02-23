@@ -12,6 +12,38 @@ import { tools, toolDefinitions } from './tools/index.js';
 import { routeToolCall } from './tools/router.js';
 import { listIntegrations as listInt, setupIntegration as setupInt } from './integrations/index.js';
 import { installMcpServer, listMcpServers, removeMcpServer, setMcpServerEnabled } from './mcp/index.js';
+import { addSkillFromUrl, listPersonas } from './personas/index.js';
+
+export async function skillsAdd(url, options) {
+    if (!options.skill) {
+        console.error(chalk.red('Error: --skill <name> is required.'));
+        process.exit(1);
+    }
+    
+    try {
+        const result = await addSkillFromUrl(url, options.skill);
+        console.log(chalk.green(`\n✓ Skill '${result.id}' added successfully! (${result.size} bytes)`));
+    } catch (error) {
+        console.error(chalk.red(`\n✗ Failed to add skill: ${error.message}`));
+        process.exit(1);
+    }
+}
+
+export async function skillsList() {
+    try {
+        const skills = await listPersonas();
+        if (skills.length === 0) {
+            console.log(chalk.yellow('No skills found.'));
+        } else {
+            console.log(chalk.bold('\nAvailable Skills:'));
+            skills.forEach(skill => {
+                console.log(`- ${chalk.cyan(skill.id)}`);
+            });
+        }
+    } catch (error) {
+        console.error(chalk.red(`Failed to list skills: ${error.message}`));
+    }
+}
 
 export async function web() {
   const spinner = ora('Starting web interface...').start();

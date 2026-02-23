@@ -26,6 +26,32 @@ A powerful, multi-personality AI agent for your terminal. This tool allows you t
 *   **Safe Mode**: Toggleable protection against automatic file deletion or command execution.
 *   **Global Access**: Run `ai-agent` from anywhere.
 
+## 🧠 Skills & Knowledge Management
+
+### Skills System
+The agent now supports a dynamic skills system that allows you to add specialized capabilities and knowledge bases from external sources (like GitHub repositories or Markdown files).
+
+#### Adding a Skill
+You can add a new skill by providing a URL to a Markdown file containing the skill definition (system prompt).
+
+```bash
+# Syntax
+ai-agent skills add <URL> --skill <skill-name>
+
+# Example: Add a research assistant skill
+ai-agent skills add https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/refs/heads/master/lead-research-assistant/SKILL.md --skill research
+```
+
+Once added, the skill becomes available as a specialized agent. You can delegate tasks to it:
+> "Delegate the research task to the 'research' agent."
+
+#### Listing Skills
+To see all available skills/agents:
+
+```bash
+ai-agent skills list
+```
+
 ## Major Roadmap: MCP & Agent-to-Agent Integrations
 
 ### Context
