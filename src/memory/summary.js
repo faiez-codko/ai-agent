@@ -1,5 +1,5 @@
 import { saveChatHistory } from '../chatStorage.js';
-import { appendDailyMemory } from './workspace.js';
+import { createCheckpoint } from './checkpoints.js';
 import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
@@ -129,8 +129,9 @@ export async function summarizeMemory(agent) {
     const messagesToSummarize = agent.memory.slice(startIndex, endIndex);
     const messagesToKeep = agent.memory.slice(endIndex);
 
-    // 2. Archive full history before modifying
-    await archiveMessages(agent.id, messagesToSummarize);
+    // 2. Create Checkpoint (replaces old archive)
+    const checkpointId = createCheckpoint(messagesToSummarize, "Pending Summary");
+    console.log(chalk.blue(`📌 Created checkpoint ${checkpointId}`));
 
     // 3. Generate Summary — with STRONG emphasis on preserving the task goal
     try {
@@ -168,7 +169,7 @@ ${messagesToSummarize.map(m => `${m.role}: ${JSON.stringify(m.content || m.tool_
         // Build the post-summarization context with task state
         const summaryMessage = {
             role: 'system',
-            content: `[PREVIOUS CONVERSATION SUMMARY]:\n${summaryResponse}\n[END SUMMARY]\n\n[ACTIVE TASK — DO NOT FORGET]: "${originalGoal}"\nFull original request: "${fullOriginalRequest.substring(0, 500)}"\nYou have made ${agent._toolCallCount || 0} tool calls so far. Continue from where you left off.`
+            content: `[MEMORY CHECKPOINT]: ${checkpointId}\nSummary:\n${summaryResponse}\n\n[CONTEXT NOTE]: Detailed conversation history for this period is saved in checkpoint "${checkpointId}". If you need specific details (code snippets, exact quotes) from this period, call tool \`read_checkpoint("${checkpointId}")\`.\n\n[ACTIVE TASK]: "${originalGoal}"\nFull original request: "${fullOriginalRequest.substring(0, 500)}"\nYou have made ${agent._toolCallCount || 0} tool calls. Continue.`
         };
 
         // 4. Update Memory
@@ -184,11 +185,6 @@ ${messagesToSummarize.map(m => `${m.role}: ${JSON.stringify(m.content || m.tool_
         // Save the compacted memory
         await saveChatHistory(agent.id, agent.memory, agent);
 
-        // Log summarization event to daily workspace memory
-        try {
-            appendDailyMemory(`Memory summarized for agent ${agent.id}: ${messagesToSummarize.length} messages compressed. Active task: "${originalGoal.substring(0, 100)}". Key topics: ${summaryResponse.substring(0, 200)}...`);
-        } catch (e) { /* ignore */ }
-
         console.log(chalk.green(`✅ Memory summarized. Reduced from ${messagesToSummarize.length + messagesToKeep.length} to ${newMemory.length} messages.`));
         return true;
 
@@ -196,18 +192,6 @@ ${messagesToSummarize.map(m => `${m.role}: ${JSON.stringify(m.content || m.tool_
         console.error("Failed to summarize memory:", e);
         return false;
     }
-}
-
-async function archiveMessages(agentId, messages) {
-    const fsp = (await import('fs/promises')).default;
-    const archiveDir = path.join(process.cwd(), '.agent', 'archive');
-    await fsp.mkdir(archiveDir, { recursive: true });
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = path.join(archiveDir, `${agentId}_${timestamp}.json`);
-
-    await fsp.writeFile(filename, JSON.stringify(messages, null, 2));
-    console.log(chalk.gray(`Archived ${messages.length} messages to ${filename}`));
 }
 
 export { saveTaskState, loadTaskState };

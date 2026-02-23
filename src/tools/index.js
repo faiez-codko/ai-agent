@@ -13,7 +13,6 @@ import { ghToolDefinitions, ghTools } from './gh.js';
 import { emailToolDefinitions, emailTools } from './email.js';
 import { whatsappToolDefinitions, whatsappTools } from './whatsapp.js';
 import { audioToolDefinitions, audioTools } from './audio.js';
-import { workspaceToolDefinitions, workspaceMemoryTools } from './workspace_memory.js';
 import memoryTools from './memory.js';
 import { listAllMcpTools, callMcp } from '../mcp/index.js';
 import fs from 'fs/promises';
@@ -291,6 +290,25 @@ export const toolDefinitions = [
       required: ["query"]
     }
   },
+  {
+    name: "read_checkpoint",
+    description: "Read a full conversation checkpoint from the archive. Use this when you see a [MEMORY CHECKPOINT] reference in context.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The Checkpoint ID (e.g., ckpt_123456)." }
+      },
+      required: ["id"]
+    }
+  },
+  {
+    name: "list_checkpoints",
+    description: "List all available conversation checkpoints.",
+    parameters: {
+      type: "object",
+      properties: {}
+    }
+  },
   ...schedulerToolDefinitions,
   ...webUiToolDefinitions,
   ...smsToolDefinitions,
@@ -300,8 +318,7 @@ export const toolDefinitions = [
   ...ghToolDefinitions,
   ...emailToolDefinitions,
   ...whatsappToolDefinitions,
-  ...audioToolDefinitions,
-  ...workspaceToolDefinitions
+  ...audioToolDefinitions
 ];
 
 export const tools = {
@@ -309,7 +326,6 @@ export const tools = {
   ...emailTools,
   ...whatsappTools,
   ...audioTools,
-  ...workspaceMemoryTools,
   ...browser_tools,
   ...db_tools,
   ...schedulerTools,

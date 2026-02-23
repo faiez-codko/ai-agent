@@ -514,7 +514,28 @@ export async function mcpRemove(name) {
 }
 
 export async function call(target, options) {
-  const payload = parseJsonOption(options?.payload, {});
+  if (options?.payload?.startsWith('@')) {
+    try {
+      options.payload = await readFile(options.payload.slice(1));
+    } catch (error) {
+      console.error(chalk.red(`Failed to read payload file: ${options.payload.slice(1)}`));
+      process.exit(1);
+    }
+  }
+
+  let payload = parseJsonOption(options?.payload, {});
+
+  // Handle case where payload is a string (parsing failed or string provided)
+  // If it looks like JSON but parsing failed, it might be due to shell quoting issues
+  if (typeof payload === 'string' && options?.payload) {
+    try {
+      // Sometimes quotes are stripped. If it starts with { and ends with }, try to fix it?
+      // Or just warn the user.
+      console.warn(chalk.yellow('Warning: Payload was not parsed as JSON. Received string:'), payload);
+      console.warn(chalk.yellow('Ensure you are using correct quoting for your shell.'));
+    } catch {}
+  }
+
   const manager = new AgentManager();
   await manager.init();
   if (manager.agents.size === 0) {

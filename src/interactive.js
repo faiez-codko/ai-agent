@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { setup, read, update, fix, run } from './commands.js';
 import { clearChatHistory } from './chatStorage.js';
 import { AgentManager } from './agentManager.js';
+import { listPersonas } from './personas/index.js';
 import { loadConfig } from './config.js';
 import { generateAudio } from './tools/audio.js';
 import ora from 'ora';
@@ -22,18 +23,18 @@ export async function startInteractiveMode() {
     console.log(chalk.gray('Initializing agents...'));
     await manager.createAgent('default', 'primary');
 
-    const specialists = [
-      { id: 'web_scraper', name: 'scraper' },
-      { id: 'coder', name: 'coder' },
-      { id: 'b2b_leadgen', name: 'leadgen' }
-    ];
-
-    for (const spec of specialists) {
-      try {
-        await manager.createAgent(spec.id, spec.name);
+    try {
+      const skills = await listPersonas();
+      for (const skill of skills) {
+        if (skill.id === 'default') continue;
+        try {
+        await manager.createAgent(skill.id, skill.id);
       } catch (e) {
-        console.error(chalk.yellow(`⚠️  Could not create agent '${spec.name}': ${e.message}`));
+        console.error(chalk.yellow(`⚠️  Could not create agent '${skill.name}': ${e.message}`));
       }
+    }
+    } catch (e) {
+      console.error(chalk.red(`Failed to load skills: ${e.message}`));
     }
   }
 

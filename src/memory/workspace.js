@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 
 const WORKSPACE_DIR = path.join(os.homedir(), '.agent', 'workspace');
+const SKILLS_DIR = path.join(os.homedir(), '.agent', 'skills');
 
 // Ensure workspace structure exists
 function ensureWorkspace() {
@@ -82,26 +83,6 @@ Use \`delegate_task\` with the agent name:
 2. For simple tasks, handle them directly — don't over-delegate.
 3. Provide COMPLETE context when delegating.
 4. Review results before reporting to the user.
-`,
-        'MEMORY.md': `# Long-Term Memory
-
-## Project Facts
-(Agent will populate this with learned project details)
-
-## User Preferences
-(Agent will populate this with user preferences)
-
-## Architecture Notes
-(Agent will populate this with architecture decisions)
-`,
-        '.learnings/LEARNINGS.md': `# Learnings Log
-<!-- Agent appends lessons learned here -->
-`,
-        '.learnings/ERRORS.md': `# Error Patterns
-<!-- Agent logs recurring errors and their solutions here -->
-`,
-        '.learnings/FEATURE_REQUESTS.md': `# Feature Requests
-<!-- Agent logs user feature requests here -->
 `
     };
 
@@ -120,13 +101,32 @@ Use \`delegate_task\` with the agent name:
 export function loadWorkspaceContext() {
     ensureWorkspace();
 
-    const files = ['SOUL.md', 'TOOLS.md', 'AGENTS.md', 'MEMORY.md'];
+    const files = ['SOUL.md', 'TOOLS.md', 'AGENTS.md'];
     const sections = [];
 
     for (const filename of files) {
         const filePath = path.join(WORKSPACE_DIR, filename);
         try {
-            const content = fs.readFileSync(filePath, 'utf-8');
+            let content = fs.readFileSync(filePath, 'utf-8');
+
+            // Dynamically append available skills to AGENTS.md
+            if (filename === 'AGENTS.md') {
+                try {
+                    if (fs.existsSync(SKILLS_DIR)) {
+                        const skills = fs.readdirSync(SKILLS_DIR)
+                            .filter(f => f.endsWith('.md') && f !== 'default.md')
+                            .map(f => f.replace('.md', ''));
+                        
+                        if (skills.length > 0) {
+                            content += `\n\n## Discovered Skills (Available for Delegation)\n`;
+                            content += skills.map(s => `- \`${s}\``).join('\n');
+                        }
+                    }
+                } catch (e) {
+                    // Ignore skill reading errors
+                }
+            }
+
             // Only include if file has meaningful content (not just headers)
             const stripped = content.replace(/^#.*$/gm, '').replace(/\s+/g, '').trim();
             if (stripped.length > 20) {
@@ -137,130 +137,7 @@ export function loadWorkspaceContext() {
         }
     }
 
-    // Load today's daily memory if it exists
-    const today = new Date().toISOString().split('T')[0];
-    const dailyPath = path.join(WORKSPACE_DIR, 'memory', `${today}.md`);
-    try {
-        if (fs.existsSync(dailyPath)) {
-            const dailyContent = fs.readFileSync(dailyPath, 'utf-8');
-            if (dailyContent.trim().length > 10) {
-                sections.push(`--- Today's Session Memory (${today}) ---\n${dailyContent.trim()}`);
-            }
-        }
-    } catch (e) {
-        // Ignore
-    }
-
-    // Load recent learnings (last 20 lines)
-    const learningsPath = path.join(WORKSPACE_DIR, '.learnings', 'LEARNINGS.md');
-    try {
-        if (fs.existsSync(learningsPath)) {
-            const lines = fs.readFileSync(learningsPath, 'utf-8').split('\n');
-            const recent = lines.slice(-20).join('\n').trim();
-            if (recent.length > 10) {
-                sections.push(`--- Recent Learnings ---\n${recent}`);
-            }
-        }
-    } catch (e) {
-        // Ignore
-    }
-
     return sections.join('\n\n');
-}
-
-/**
- * Append to today's daily memory file.
- * Used to log important session events that should persist to the next conversation.
- */
-export function appendDailyMemory(content) {
-    ensureWorkspace();
-    const today = new Date().toISOString().split('T')[0];
-    const dailyPath = path.join(WORKSPACE_DIR, 'memory', `${today}.md`);
-
-    const timestamp = new Date().toLocaleTimeString();
-    const entry = `\n[${timestamp}] ${content}\n`;
-
-    fs.appendFileSync(dailyPath, entry);
-}
-
-/**
- * Append to learnings file.
- */
-export function appendLearning(content) {
-    ensureWorkspace();
-    const learningsPath = path.join(WORKSPACE_DIR, '.learnings', 'LEARNINGS.md');
-    const timestamp = new Date().toISOString().split('T')[0];
-    const entry = `\n- [${timestamp}] ${content}`;
-    fs.appendFileSync(learningsPath, entry);
-}
-
-/**
- * Append to errors file.
- */
-export function appendError(errorDesc, solution = '') {
-    ensureWorkspace();
-    const errorsPath = path.join(WORKSPACE_DIR, '.learnings', 'ERRORS.md');
-    const timestamp = new Date().toISOString().split('T')[0];
-    let entry = `\n### [${timestamp}] ${errorDesc}`;
-    if (solution) {
-        entry += `\n**Solution**: ${solution}`;
-    }
-    fs.appendFileSync(errorsPath, entry);
-}
-
-/**
- * Update the MEMORY.md file with new persistent facts.
- * This should be called when the agent learns something important about the project.
- */
-export function updatePersistentMemory(section, content) {
-    ensureWorkspace();
-    const memoryPath = path.join(WORKSPACE_DIR, 'MEMORY.md');
-
-    let existing = '';
-    try {
-        existing = fs.readFileSync(memoryPath, 'utf-8');
-    } catch (e) {
-        existing = '# Long-Term Memory\n';
-    }
-
-    // Append under the appropriate section
-    const sectionHeader = `## ${section}`;
-    if (existing.includes(sectionHeader)) {
-        // Append after the section header
-        const idx = existing.indexOf(sectionHeader);
-        const nextSection = existing.indexOf('\n## ', idx + sectionHeader.length);
-        const insertPoint = nextSection !== -1 ? nextSection : existing.length;
-        existing = existing.slice(0, insertPoint) + `\n- ${content}` + existing.slice(insertPoint);
-    } else {
-        // Add new section
-        existing += `\n\n${sectionHeader}\n- ${content}`;
-    }
-
-    fs.writeFileSync(memoryPath, existing);
-}
-
-/**
- * Clean up old daily memory files (keep last 7 days).
- */
-export function pruneOldDailyMemory(keepDays = 7) {
-    ensureWorkspace();
-    const memoryDir = path.join(WORKSPACE_DIR, 'memory');
-
-    try {
-        const files = fs.readdirSync(memoryDir).filter(f => f.endsWith('.md'));
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - keepDays);
-
-        for (const file of files) {
-            const dateStr = file.replace('.md', '');
-            const fileDate = new Date(dateStr);
-            if (!isNaN(fileDate.getTime()) && fileDate < cutoffDate) {
-                fs.unlinkSync(path.join(memoryDir, file));
-            }
-        }
-    } catch (e) {
-        // Ignore cleanup errors
-    }
 }
 
 export { WORKSPACE_DIR, ensureWorkspace };

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
+import { loadCheckpoint, listCheckpoints } from '../memory/checkpoints.js';
 
 const MEMORY_DIR = path.join(process.cwd(), '.agent', 'memory');
 
@@ -118,31 +119,60 @@ ${content}
         try {
             const baseDir = getMemoryDir(agent);
             const results = [];
-            if (!fs.existsSync(baseDir)) return "No memories found.";
-
-            const categories = fs.readdirSync(baseDir).filter(f => fs.statSync(path.join(baseDir, f)).isDirectory());
+            // ... (rest of implementation) ...
             
-            for (const cat of categories) {
-                const catDir = path.join(baseDir, cat);
-                const files = fs.readdirSync(catDir);
-                
-                for (const file of files) {
-                    const content = fs.readFileSync(path.join(catDir, file), 'utf8');
-                    if (content.toLowerCase().includes(query.toLowerCase())) {
-                        results.push({
-                            key: file.replace('.md', ''),
-                            category: cat,
-                            preview: content.substring(0, 150).replace(/\n/g, ' ') + '...'
-                        });
+            // Re-implementing search to be robust
+            if (fs.existsSync(baseDir)) {
+                const categories = fs.readdirSync(baseDir).filter(f => fs.statSync(path.join(baseDir, f)).isDirectory());
+                for (const cat of categories) {
+                    const catDir = path.join(baseDir, cat);
+                    const files = fs.readdirSync(catDir).filter(f => f.endsWith('.md'));
+                    for (const file of files) {
+                        try {
+                            const content = fs.readFileSync(path.join(catDir, file), 'utf8');
+                            if (content.toLowerCase().includes(query.toLowerCase())) {
+                                results.push({
+                                    key: file.replace('.md', ''),
+                                    category: cat,
+                                    preview: content.substring(0, 150).replace(/\n/g, ' ') + '...'
+                                });
+                            }
+                        } catch (e) {}
                     }
                 }
             }
-            
+
             if (results.length === 0) return `No memories found matching "${query}".`;
-            
             return `Search Results for "${query}":\n` + results.map(r => `- [${r.category}] ${r.key}: ${r.preview}`).join('\n');
         } catch (error) {
             return `Error searching memories: ${error.message}`;
+        }
+    },
+
+    // Read a specific checkpoint
+    read_checkpoint: async ({ id }) => {
+        try {
+            const checkpoint = loadCheckpoint(id);
+            if (!checkpoint) return `Checkpoint ${id} not found.`;
+            
+            return `CHECKPOINT ${id} (Timestamp: ${checkpoint.timestamp})\n` +
+                   `SUMMARY: ${checkpoint.summary}\n` +
+                   `MESSAGES:\n` +
+                   checkpoint.messages.map(m => `[${m.role}] ${JSON.stringify(m.content || m.tool_calls)}`).join('\n\n');
+        } catch (error) {
+            return `Error reading checkpoint: ${error.message}`;
+        }
+    },
+
+    // List all checkpoints
+    list_checkpoints: async () => {
+        try {
+            const checkpoints = listCheckpoints();
+            if (checkpoints.length === 0) return "No checkpoints found.";
+            return "Available Checkpoints:\n" + 
+                   checkpoints.map(c => `- ${c.id} (${c.timestamp}): ${c.summary}`).join('\n');
+        } catch (error) {
+            return `Error listing checkpoints: ${error.message}`;
         }
     }
 };

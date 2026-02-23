@@ -5,7 +5,7 @@ import { tools as toolImplementations, toolDefinitions } from './tools/index.js'
 import { loadPersona } from './personas/index.js';
 import { loadChatHistory, saveChatHistory } from './chatStorage.js';
 import { summarizeMemory, saveTaskState } from './memory/summary.js';
-import { loadWorkspaceContext, appendDailyMemory, appendError, pruneOldDailyMemory } from './memory/workspace.js';
+import { loadWorkspaceContext } from './memory/workspace.js';
 import { sendMessage as sendTelegramMessage } from './tools/telegram.js';
 import chalk from 'chalk';
 import path from 'path';
@@ -75,9 +75,6 @@ export class Agent {
             }
         }
 
-        // Prune old daily memory files on init
-        try { pruneOldDailyMemory(7); } catch (e) { /* ignore */ }
-
         // Clean up old overflow files (keep last 50)
         try {
             const overflowDir = path.join(process.cwd(), '.agent', 'overflow');
@@ -145,6 +142,13 @@ For any complex task (multi-step, research, or development):
 4. UPDATE \`${taskPlanPath}\` immediately after completing a phase (mark [x], update Status).
 
 NOTE: Ensure the directory \`${agentDir}\` exists before writing files.
+
+MEMORY & CHECKPOINTS:
+This agent uses a file-based checkpoint system for unlimited context.
+1. When memory fills up, old messages are archived to JSON checkpoints.
+2. You will see a [MEMORY CHECKPOINT] message with an ID and summary.
+3. If you need details from that period (e.g., specific code, user instructions), use \`read_checkpoint(id)\`.
+4. You can list all checkpoints with \`list_checkpoints()\`.
 `;
 
         // Append Additional Context (e.g. Integration Rules)
