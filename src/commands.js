@@ -13,6 +13,94 @@ import { routeToolCall } from './tools/router.js';
 import { listIntegrations as listInt, setupIntegration as setupInt } from './integrations/index.js';
 import { installMcpServer, listMcpServers, removeMcpServer, setMcpServerEnabled } from './mcp/index.js';
 import { addSkillFromUrl, listPersonas } from './personas/index.js';
+import { listSessions, getSession } from './chatStorage.js';
+import { parse } from 'json2csv';
+
+export async function sessionsList(options) {
+    try {
+        const limit = parseInt(options.limit) || 10;
+        const sessions = await listSessions(limit);
+        
+        if (sessions.length === 0) {
+            console.log(chalk.yellow('No sessions found.'));
+            return;
+        }
+
+        console.log(chalk.bold(`\nRecent Sessions (Last ${limit}):`));
+        console.log(chalk.gray('ID | Date | Messages | First Message'));
+        console.log(chalk.gray('---|------|----------|--------------'));
+
+        sessions.forEach(s => {
+            const date = new Date(s.created_at).toLocaleString();
+            const msg = s.first_message ? (s.first_message.substring(0, 50) + (s.first_message.length > 50 ? '...' : '')) : '(No messages)';
+            console.log(`${chalk.cyan(s.id)} | ${date} | ${s.message_count} | ${msg}`);
+        });
+        console.log('');
+    } catch (error) {
+        console.error(chalk.red(`Failed to list sessions: ${error.message}`));
+    }
+}
+
+export async function sessionsExport(sessionId, options) {
+    try {
+        const session = await getSession(sessionId);
+        if (!session) {
+            console.error(chalk.red(`Session ${sessionId} not found.`));
+            process.exit(1);
+        }
+
+        let outputData = '';
+        const format = options.format.toLowerCase();
+
+        if (format === 'json') {
+            outputData = JSON.stringify(session, null, 2);
+        } else if (format === 'csv') {
+            // Flatten for CSV
+            const flatMessages = session.messages.map(m => ({
+                session_id: session.id,
+                agent_id: session.agent_id,
+                session_created_at: session.created_at,
+                message_id: m.id,
+                role: m.role,
+                content: m.content,
+                tool_calls: m.tool_calls,
+                tool_call_id: m.tool_call_id,
+                name: m.name,
+                message_created_at: m.created_at
+            }));
+            
+            if (flatMessages.length === 0) {
+                 // Create a dummy row with session info if no messages
+                 flatMessages.push({
+                    session_id: session.id,
+                    agent_id: session.agent_id,
+                    session_created_at: session.created_at,
+                    message_id: '', role: '', content: '', tool_calls: '', tool_call_id: '', name: '', message_created_at: ''
+                 });
+            }
+
+            try {
+                outputData = parse(flatMessages);
+            } catch (err) {
+                 throw new Error(`CSV conversion failed: ${err.message}`);
+            }
+        } else {
+            console.error(chalk.red(`Unsupported format: ${format}. Use 'json' or 'csv'.`));
+            process.exit(1);
+        }
+
+        if (options.out) {
+            await writeFile(options.out, outputData);
+            console.log(chalk.green(`Session ${sessionId} exported to ${options.out}`));
+        } else {
+            console.log(outputData);
+        }
+
+    } catch (error) {
+        console.error(chalk.red(`Failed to export session: ${error.message}`));
+        process.exit(1);
+    }
+}
 
 export async function skillsAdd(url, options) {
     if (!options.skill) {

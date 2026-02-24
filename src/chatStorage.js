@@ -115,15 +115,29 @@ function getDb() {
     return dbPromise;
 }
 
-export async function loadChatHistory(agentId) {
+export async function createSession(agentId) {
+    const db = await getDb();
+    // Ensure agent exists to satisfy foreign key constraint
+    await db.run("INSERT OR IGNORE INTO agents (agent_id, agent_name) VALUES (?, ?)", agentId, agentId);
+    
+    const result = await db.run("INSERT INTO chat_sessions (agent_id) VALUES (?)", agentId);
+    return result.lastID;
+}
+
+export async function loadChatHistory(agentId, sessionId = null) {
     try {
         const db = await getDb();
         
-        // Get the latest session for this agent
-        const session = await db.get(
-            "SELECT id FROM chat_sessions WHERE agent_id = ? ORDER BY id DESC LIMIT 1",
-            agentId
-        );
+        let session;
+        if (sessionId) {
+            session = await db.get("SELECT id FROM chat_sessions WHERE id = ? AND agent_id = ?", sessionId, agentId);
+        } else {
+            // Get the latest session for this agent
+            session = await db.get(
+                "SELECT id FROM chat_sessions WHERE agent_id = ? ORDER BY id DESC LIMIT 1",
+                agentId
+            );
+        }
 
         if (!session) {
             return { messages: [], sessionId: null };
@@ -182,7 +196,7 @@ export async function getToolExecution(id) {
     }
 }
 
-export async function saveChatHistory(agentId, messages, agentInstance = null) {
+export async function saveChatHistory(agentId, messages, agentInstance = null, sessionId = null) {
     const db = await getDb();
 
     // 1. Ensure Agent Exists
@@ -203,17 +217,30 @@ export async function saveChatHistory(agentId, messages, agentInstance = null) {
     }
 
     // 2. Get or Create Session
-    // For now, we reuse the latest session or create one if none.
-    // Since we overwrite history in the current logic, let's keep it simple:
-    // If we are saving, we are appending to the current "active" session.
-    let session = await db.get(
-        "SELECT id FROM chat_sessions WHERE agent_id = ? ORDER BY id DESC LIMIT 1",
-        agentId
-    );
-
-    if (!session) {
-        const result = await db.run("INSERT INTO chat_sessions (agent_id) VALUES (?)", agentId);
-        session = { id: result.lastID };
+    let session;
+    if (sessionId) {
+        session = await db.get("SELECT id FROM chat_sessions WHERE id = ?", sessionId);
+        if (!session) {
+             // If ID provided but not found, fallback to create new? Or error?
+             // Let's create it if valid integer, otherwise just create new.
+             // Actually, safer to create a new one if not found to avoid errors, 
+             // but if user expects specific ID, this is weird.
+             // Let's assume if sessionId is passed, it *should* exist. 
+             // If not, we create a new one.
+             console.warn(`Session ${sessionId} not found, creating new one.`);
+             const result = await db.run("INSERT INTO chat_sessions (agent_id) VALUES (?)", agentId);
+             session = { id: result.lastID };
+        }
+    } else {
+        // Reuse latest or create
+        session = await db.get(
+            "SELECT id FROM chat_sessions WHERE agent_id = ? ORDER BY id DESC LIMIT 1",
+            agentId
+        );
+        if (!session) {
+            const result = await db.run("INSERT INTO chat_sessions (agent_id) VALUES (?)", agentId);
+            session = { id: result.lastID };
+        }
     }
 
     // 3. Sync Messages
@@ -251,4 +278,34 @@ export async function clearChatHistory(agentId = null) {
         await db.run("DELETE FROM chat_sessions");
         await db.run("DELETE FROM agents");
     }
+}
+
+export async function listSessions(limit = 10) {
+    const db = await getDb();
+    return await db.all(`
+        SELECT 
+            s.id, 
+            s.agent_id, 
+            s.created_at,
+            (SELECT COUNT(*) FROM chat c WHERE c.session_id = s.id) as message_count,
+            (SELECT content FROM chat c WHERE c.session_id = s.id AND role = 'user' LIMIT 1) as first_message
+        FROM chat_sessions s
+        ORDER BY s.created_at DESC
+        LIMIT ?
+    `, limit);
+}
+
+export async function getSession(sessionId) {
+    const db = await getDb();
+    const session = await db.get("SELECT * FROM chat_sessions WHERE id = ?", sessionId);
+    if (!session) return null;
+
+    const messages = await db.all("SELECT * FROM chat WHERE session_id = ? ORDER BY id ASC", sessionId);
+    const toolExecutions = await db.all("SELECT * FROM tool_executions WHERE session_id = ? ORDER BY id ASC", sessionId);
+
+    return {
+        ...session,
+        messages,
+        toolExecutions
+    };
 }

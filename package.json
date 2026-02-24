@@ -12,6 +12,7 @@
     "glob": "^13.0.0",
     "imap-simple": "^5.1.0",
     "inquirer": "^13.1.0",
+    "json2csv": "^6.0.0-alpha.2",
     "mailparser": "^3.9.3",
     "mysql2": "^3.16.0",
     "node-cron": "^3.0.3",

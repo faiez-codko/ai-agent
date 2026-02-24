@@ -3,7 +3,7 @@ import { readFile, writeFile, listFiles } from './tools/fs.js';
 import { runCommand } from './tools/shell.js';
 import { tools as toolImplementations, toolDefinitions } from './tools/index.js';
 import { loadPersona } from './personas/index.js';
-import { loadChatHistory, saveChatHistory, logToolExecution } from './chatStorage.js';
+import { loadChatHistory, saveChatHistory, logToolExecution, createSession } from './chatStorage.js';
 import { summarizeMemory, saveTaskState } from './memory/summary.js';
 import { loadWorkspaceContext } from './memory/workspace.js';
 import { sendMessage as sendTelegramMessage } from './tools/telegram.js';
@@ -96,55 +96,65 @@ ${this.persona.systemPrompt}
 
 ═══ WORKSPACE KNOWLEDGE ═══
 ${workspaceKnowledge || '(No workspace knowledge loaded)'}
-═══ END WORKSPACE KNOWLEDGE ═══
+═══ END WORKSPACE KNOWLEDGE ═══`;
 
-CORE OPERATIONAL RULES:
-1. You are an autonomous agent. ACT, do not just chat.
-2. Use tools to complete tasks immediately. Do not ask for permission unless critical.
-3. MINIMIZE TOOL CALLS: Plan first. Don't call tools speculatively.
-4. If native tool calling fails, output JSON: \`{ "tool": "name", "args": { ... } }\`
+        // Load Chat History
+        // If config provided a sessionId, use it. Otherwise, load latest.
+        const history = await loadChatHistory(this.id, this.sessionId);
+        this.memory = history.messages;
+        this.sessionId = history.sessionId;
+        
+        // If no session exists yet (new agent), this.sessionId might be null.
+        // It will be created on first save.
 
-CONTEXT MANAGEMENT:
-- [TASK ANCHOR]: This is your CURRENT GOAL. Stay focused on it.
-- [MEMORY CHECKPOINT]: Old messages are archived. Use \`read_checkpoint(id)\` to retrieve details.
-- Tool outputs may be truncated. If you need full content, re-read the file.
+        this.systemPrompt = systemPrompt;
 
-PLANNING:
-For complex tasks:
-1. Create/Update \`${taskPlanPath}\` with Goal, Phases, and Status.
-2. Read \`${taskPlanPath}\` before starting new steps.
-`;
-
-        // Append Additional Context (e.g. Integration Rules)
-        if (this.additionalContext) {
-            systemPrompt += `\n\n${this.additionalContext}\n\nIMPORTANT: The script directory is available at: ${scriptDir}`;
-        }
-
-        this.memory.push({
-            role: 'system',
-            content: systemPrompt
-        });
-
-        // Load chat history
-        try {
-            const { messages, sessionId } = await loadChatHistory(this.id);
-            if (sessionId) this.sessionId = sessionId;
-            
-            if (messages && messages.length > 0) {
-                // Update system prompt in history or prepend it
-                if (messages[0].role === 'system') {
-                    messages[0].content = systemPrompt;
-                } else {
-                    messages.unshift({ role: 'system', content: systemPrompt });
-                }
-                this.memory = messages;
+        // Ensure system prompt is in memory (for _buildContext)
+        if (this.memory.length === 0) {
+            this.memory.push({ role: 'system', content: systemPrompt });
+        } else {
+            // Update existing system prompt if present, or prepend it
+            if (this.memory[0].role === 'system') {
+                this.memory[0].content = systemPrompt;
+            } else {
+                this.memory.unshift({ role: 'system', content: systemPrompt });
             }
-        } catch (e) {
-            console.error("Failed to load chat history:", e);
-            try {
-                await sendTelegramMessage(`Agent ${this.id} failed to load chat history: ${e.message || e}`);
-            } catch { }
         }
+    }
+
+    async startNewSession() {
+        this.sessionId = await createSession(this.id);
+        this.memory = [];
+        if (this.systemPrompt) {
+            this.memory.push({ role: 'system', content: this.systemPrompt });
+        }
+        console.log(chalk.green(`Started new session: ${this.sessionId}`));
+        return this.sessionId;
+    }
+
+    async loadSession(sessionId) {
+        const history = await loadChatHistory(this.id, sessionId);
+        if (!history.sessionId) {
+            throw new Error(`Session ${sessionId} not found for agent ${this.id}`);
+        }
+        this.memory = history.messages;
+        this.sessionId = history.sessionId;
+        
+        // Ensure system prompt is in memory
+        if (this.systemPrompt) {
+            if (this.memory.length === 0) {
+                this.memory.push({ role: 'system', content: this.systemPrompt });
+            } else {
+                if (this.memory[0].role === 'system') {
+                    this.memory[0].content = this.systemPrompt;
+                } else {
+                    this.memory.unshift({ role: 'system', content: this.systemPrompt });
+                }
+            }
+        }
+
+        console.log(chalk.green(`Loaded session: ${this.sessionId}`));
+        return this.sessionId;
     }
 
     async chat(userMessage, confirmCallback = null, onUpdate = null) {
@@ -153,7 +163,7 @@ For complex tasks:
         // Ensure session exists immediately so we can log tool calls
         if (!this.sessionId) {
             try {
-                this.sessionId = await saveChatHistory(this.id, this.memory, this);
+                this.sessionId = await saveChatHistory(this.id, this.memory, this, this.sessionId);
             } catch (e) {
                 console.error("Failed to create session for DB logging:", e);
             }
@@ -252,7 +262,7 @@ For complex tasks:
 
             // If no tool calls, we are done
             if (!response.toolCalls || response.toolCalls.length === 0) {
-                await saveChatHistory(this.id, this.memory, this);
+                await saveChatHistory(this.id, this.memory, this, this.sessionId);
                 if (onUpdate) onUpdate({ type: 'done' });
                 return finalResponse || response.content;
             }

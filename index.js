@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import { Command } from 'commander';
-import { setup, read, update, fix, run, web, integrationList, integrationSetup, mcpList, mcpInstall, mcpEnable, mcpDisable, mcpRemove, call, skillsAdd, skillsList } from './src/commands.js';
+import { setup, read, update, fix, run, web, integrationList, integrationSetup, mcpList, mcpInstall, mcpEnable, mcpDisable, mcpRemove, call, skillsAdd, skillsList, sessionsList, sessionsExport } from './src/commands.js';
 import { startInteractiveMode } from './src/interactive.js';
 import chalk from 'chalk';
 import path from 'path';
@@ -124,6 +124,21 @@ if (process.argv.length <= 2) {
     .command('list')
     .description('List available skills')
     .action(skillsList);
+
+  const sessions = program.command('sessions').description('Manage chat sessions');
+
+  sessions
+    .command('list')
+    .description('List recent sessions')
+    .option('--limit <number>', 'Number of sessions to list', '10')
+    .action(sessionsList);
+
+  sessions
+    .command('export <sessionId>')
+    .description('Export a session to JSON or CSV')
+    .option('--format <format>', 'Output format (json, csv)', 'json')
+    .option('--out <file>', 'Output file path')
+    .action(sessionsExport);
 
   program.parse();
 }

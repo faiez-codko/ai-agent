@@ -1,6 +1,6 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import { setup, read, update, fix, run } from './commands.js';
+import { setup, read, update, fix, run, sessionsList } from './commands.js';
 import { clearChatHistory } from './chatStorage.js';
 import { AgentManager } from './agentManager.js';
 import { listPersonas } from './personas/index.js';
@@ -220,6 +220,33 @@ async function handleCommand(inputLine, manager) {
         await manager.saveState();
         console.log(chalk.yellow(`\nSafe Mode is now ${agent.safeMode ? 'ENABLED' : 'DISABLED'}\n`));
         break;
+      case '/session':
+        if (args.length < 2) {
+          console.log(chalk.yellow('Usage: /session <new|list|switch> [args]'));
+        } else {
+          const subCmd = args[1].toLowerCase();
+          if (subCmd === 'new') {
+            await agent.startNewSession();
+            console.log(chalk.green('New session started. Memory cleared.'));
+          } else if (subCmd === 'list') {
+            await sessionsList({ limit: 10 });
+          } else if (subCmd === 'switch') {
+            if (args.length < 3) {
+              console.log(chalk.red('Usage: /session switch <sessionId>'));
+            } else {
+              const sessionId = args[2];
+              try {
+                await agent.loadSession(sessionId);
+                console.log(chalk.green(`Switched to session ${sessionId}`));
+              } catch (e) {
+                console.error(chalk.red(e.message));
+              }
+            }
+          } else {
+            console.log(chalk.red('Unknown session command. Use new, list, or switch.'));
+          }
+        }
+        break;
       default:
         console.log(chalk.red('Unknown command: ' + command));
         console.log('Type /help for list of commands.');
@@ -245,6 +272,7 @@ function showHelp() {
   console.log('  /research <directory>      Analyze a directory structure');
   console.log('  /clear                     Clear chat memory');
   console.log('  /history                   Show agent memory dump');
+  console.log('  /session <new|list|switch> Manage sessions');
   console.log('  /safe-mode                 Toggle Safe Mode (ask before dangerous actions)');
   console.log('');
 }
