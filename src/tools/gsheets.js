@@ -1,21 +1,36 @@
 import path from 'path';
 import fs from 'fs/promises';
+import os from 'os';
 import { loadConfig } from '../config.js';
-import SheetsService from './sheets.js';
+import { SheetsService } from './sheets.js';
 
 async function getService() {
   const config = await loadConfig();
-  const keyFile = config.google_sheets?.serviceKeyFile;
-  if (!keyFile) {
-    throw new Error("Google Sheets not configured. Run: ai-agent setup sheets --file <service-account.json>");
+  const oauthClientPath = config.google_sheets?.oauthClientFile;
+  if (!oauthClientPath) {
+    throw new Error("Google Sheets not configured. Run: ai-agent setup sheets --file <oauth.client.json>");
   }
-  // Ensure file exists
+  
+  // Ensure client file exists
   try {
-    await fs.access(keyFile);
+    await fs.access(oauthClientPath);
   } catch {
-    throw new Error(`Service account file not found at: ${keyFile}`);
+    throw new Error(`OAuth client file not found at: ${oauthClientPath}`);
   }
-  return new SheetsService({ keyFile });
+
+  // Token path in user's home directory
+  const tokenPath = path.join(os.homedir(), '.oauth.token.json');
+  
+  // Instantiate SheetsService with OAuth config
+  const service = new SheetsService({ 
+    oauthClientPath,
+    tokenPath 
+  });
+  
+  // Initialize (handles auth flow if needed)
+  await service.init();
+  
+  return service;
 }
 
 export const sheetsTools = {

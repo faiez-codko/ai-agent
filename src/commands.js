@@ -17,12 +17,14 @@ import { listSessions, getSession } from './chatStorage.js';
 import { parse } from 'json2csv';
 import path from 'path';
 import fsp from 'fs/promises';
+import os from 'os';
+import { SheetsService } from './tools/sheets.js';
 
 export async function setupSheets(options) {
     try {
         const file = options.file;
         if (!file) {
-            console.error(chalk.red('Error: --file <service-account.json> is required.'));
+            console.error(chalk.red('Error: --file <oauth.client.json> is required.'));
             process.exit(1);
         }
         const resolved = path.isAbsolute(file) ? file : path.join(process.cwd(), file);
@@ -30,13 +32,31 @@ export async function setupSheets(options) {
             const stat = await fsp.stat(resolved);
             if (!stat.isFile()) throw new Error('Not a file');
         } catch {
-            console.error(chalk.red(`Service account key file not found: ${resolved}`));
+            console.error(chalk.red(`OAuth client file not found: ${resolved}`));
             process.exit(1);
         }
+        
         const config = await loadConfig();
-        config.google_sheets = { serviceKeyFile: resolved };
+        config.google_sheets = { oauthClientFile: resolved };
         await saveConfig(config);
-        console.log(chalk.green(`Google Sheets configured with service account file:\n${resolved}`));
+        
+        console.log(chalk.blue('Initiating Google Sheets authentication...'));
+        
+        // Token path in user's home directory
+        const tokenPath = path.join(os.homedir(), '.oauth.token.json');
+        
+        // Instantiate and initialize service to trigger auth flow
+        const service = new SheetsService({ 
+            oauthClientPath: resolved,
+            tokenPath 
+        });
+        
+        await service.init();
+        
+        console.log(chalk.green(`Google Sheets configured successfully!`));
+        console.log(chalk.green(`- Client file: ${resolved}`));
+        console.log(chalk.green(`- Token file: ${tokenPath}`));
+        
     } catch (error) {
         console.error(chalk.red(`Failed to configure Google Sheets: ${error.message}`));
         process.exit(1);

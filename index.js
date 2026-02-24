@@ -35,8 +35,8 @@ if (process.argv.length <= 2) {
 
   setupCmd
     .command('sheets')
-    .description('Configure Google Sheets service account')
-    .option('--file <path>', 'Path to service account JSON file')
+    .description('Configure Google Sheets OAuth client')
+    .option('--file <path>', 'Path to OAuth client JSON file')
     .action(setupSheets);
 
   program
