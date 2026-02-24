@@ -111,44 +111,20 @@ ${workspaceKnowledge || '(No workspace knowledge loaded)'}
 ═══ END WORKSPACE KNOWLEDGE ═══
 
 CORE OPERATIONAL RULES:
-1. You are an autonomous agent. You are expected to ACT, not just chat.
-2. When a user asks for a task, use your tools to complete it immediately.
-3. Do not refuse tasks. If you are unsure, ask for clarification, but bias towards action.
-4. MINIMIZE TOOL CALLS: Plan your approach first. Don't call tools speculatively.
-5. After every 3-5 tool calls, PAUSE and re-state what you are trying to accomplish.
+1. You are an autonomous agent. ACT, do not just chat.
+2. Use tools to complete tasks immediately. Do not ask for permission unless critical.
+3. MINIMIZE TOOL CALLS: Plan first. Don't call tools speculatively.
+4. If native tool calling fails, output JSON: \`{ "tool": "name", "args": { ... } }\`
 
-You have ${this.toolsDefinition.length} tools available (provided via API). Refer to TOOLS.md in workspace knowledge for usage tips.
+CONTEXT MANAGEMENT:
+- [TASK ANCHOR]: This is your CURRENT GOAL. Stay focused on it.
+- [MEMORY CHECKPOINT]: Old messages are archived. Use \`read_checkpoint(id)\` to retrieve details.
+- Tool outputs may be truncated. If you need full content, re-read the file.
 
-IMPORTANT:
-1. ALWAYS use the provided tools to perform actions. 
-2. Do NOT describe what you are going to do with a tool in JSON format in your text response. USE THE NATIVE TOOL CALLING MECHANISM.
-3. If native tool calling fails, output a JSON block in this exact format:
-\`\`\`json
-{ "tool": "tool_name", "args": { "param": "value" } }
-\`\`\`
-4. Do not hallucinate file contents.
-5. When navigating directories, use change_directory (cd) and read_dir.
-
-CONTEXT MANAGEMENT (CRITICAL):
-- If you see a [TASK ANCHOR] message, that is your CURRENT GOAL. Stay focused on it.
-- Tool outputs older than 3 turns may be compressed. If you need details, re-read the file.
-- Save important discoveries to memory_save so you don't need to re-read files.
-
-PLANNING & PERSISTENCE:
-For any complex task (multi-step, research, or development):
-1. Create \`${taskPlanPath}\` FIRST. Define the Goal, Phases (with checkboxes), and current Status.
-2. Create \`${notesPath}\` for research findings.
-3. READ \`${taskPlanPath}\` before starting each new step to refresh your context.
-4. UPDATE \`${taskPlanPath}\` immediately after completing a phase (mark [x], update Status).
-
-NOTE: Ensure the directory \`${agentDir}\` exists before writing files.
-
-MEMORY & CHECKPOINTS:
-This agent uses a file-based checkpoint system for unlimited context.
-1. When memory fills up, old messages are archived to JSON checkpoints.
-2. You will see a [MEMORY CHECKPOINT] message with an ID and summary.
-3. If you need details from that period (e.g., specific code, user instructions), use \`read_checkpoint(id)\`.
-4. You can list all checkpoints with \`list_checkpoints()\`.
+PLANNING:
+For complex tasks:
+1. Create/Update \`${taskPlanPath}\` with Goal, Phases, and Status.
+2. Read \`${taskPlanPath}\` before starting new steps.
 `;
 
         // Append Additional Context (e.g. Integration Rules)
@@ -393,6 +369,15 @@ Tool calls so far: ${this._toolCallCount}. Stay focused. What is the NEXT step?`
                 appendDailyMemory(summary);
                 console.log(chalk.gray(`📝 Auto-logged task to daily memory (${this._toolCallCount} tool calls)`));
             } catch (e) { /* ignore */ }
+        }
+
+        // Loop limit reached
+        if (loopCount >= MAX_LOOPS) {
+            const limitMsg = `⚠️  Agent loop limit reached (${MAX_LOOPS}). History saved.`;
+            console.log(chalk.red(limitMsg));
+            await saveChatHistory(this.id, this.memory, this);
+            if (onUpdate) onUpdate({ type: 'done' });
+            return finalResponse || limitMsg;
         }
 
         if (onUpdate) onUpdate({ type: 'done' });
