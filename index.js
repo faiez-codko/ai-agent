@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import { Command } from 'commander';
-import { setup, read, update, fix, run, web, integrationList, integrationSetup, mcpList, mcpInstall, mcpEnable, mcpDisable, mcpRemove, call, skillsAdd, skillsList, sessionsList, sessionsExport } from './src/commands.js';
+import { setup, setupSheets, read, update, fix, run, web, integrationList, integrationSetup, mcpList, mcpInstall, mcpEnable, mcpDisable, mcpRemove, call, skillsAdd, skillsList, sessionsList, sessionsExport } from './src/commands.js';
 import { startInteractiveMode } from './src/interactive.js';
 import chalk from 'chalk';
 import path from 'path';
@@ -28,10 +28,16 @@ if (process.argv.length <= 2) {
     .description('AI CLI Agent for managing client projects')
     .version('1.0.0');
 
-  program
+  const setupCmd = program
     .command('setup')
     .description('Configure AI provider and settings')
     .action(setup);
+
+  setupCmd
+    .command('sheets')
+    .description('Configure Google Sheets service account')
+    .option('--file <path>', 'Path to service account JSON file')
+    .action(setupSheets);
 
   program
     .command('read <file> [query]')

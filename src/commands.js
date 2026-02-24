@@ -15,6 +15,33 @@ import { installMcpServer, listMcpServers, removeMcpServer, setMcpServerEnabled 
 import { addSkillFromUrl, listPersonas } from './personas/index.js';
 import { listSessions, getSession } from './chatStorage.js';
 import { parse } from 'json2csv';
+import path from 'path';
+import fsp from 'fs/promises';
+
+export async function setupSheets(options) {
+    try {
+        const file = options.file;
+        if (!file) {
+            console.error(chalk.red('Error: --file <service-account.json> is required.'));
+            process.exit(1);
+        }
+        const resolved = path.isAbsolute(file) ? file : path.join(process.cwd(), file);
+        try {
+            const stat = await fsp.stat(resolved);
+            if (!stat.isFile()) throw new Error('Not a file');
+        } catch {
+            console.error(chalk.red(`Service account key file not found: ${resolved}`));
+            process.exit(1);
+        }
+        const config = await loadConfig();
+        config.google_sheets = { serviceKeyFile: resolved };
+        await saveConfig(config);
+        console.log(chalk.green(`Google Sheets configured with service account file:\n${resolved}`));
+    } catch (error) {
+        console.error(chalk.red(`Failed to configure Google Sheets: ${error.message}`));
+        process.exit(1);
+    }
+}
 
 export async function sessionsList(options) {
     try {

@@ -13,6 +13,7 @@ import { ghToolDefinitions, ghTools } from './gh.js';
 import { emailToolDefinitions, emailTools } from './email.js';
 import { whatsappToolDefinitions, whatsappTools } from './whatsapp.js';
 import { audioToolDefinitions, audioTools } from './audio.js';
+import { sheetsToolDefinitions, sheetsTools } from './gsheets.js';
 import memoryTools from './memory.js';
 import { listAllMcpTools, callMcp } from '../mcp/index.js';
 import fs from 'fs/promises';
@@ -329,7 +330,8 @@ export const toolDefinitions = [
   ...ghToolDefinitions,
   ...emailToolDefinitions,
   ...whatsappToolDefinitions,
-  ...audioToolDefinitions
+  ...audioToolDefinitions,
+  ...sheetsToolDefinitions
 ];
 
 export const tools = {
@@ -337,6 +339,7 @@ export const tools = {
   ...emailTools,
   ...whatsappTools,
   ...audioTools,
+  ...sheetsTools,
   ...browser_tools,
   ...db_tools,
   ...schedulerTools,
