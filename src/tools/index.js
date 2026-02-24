@@ -309,6 +309,17 @@ export const toolDefinitions = [
       properties: {}
     }
   },
+  {
+    name: "read_tool_output",
+    description: "Read the full output of a tool execution from the database. Use this when you see a [SYSTEM: Full output stored in SQLite...] message.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The DB ID of the tool execution." }
+      },
+      required: ["id"]
+    }
+  },
   ...schedulerToolDefinitions,
   ...webUiToolDefinitions,
   ...smsToolDefinitions,

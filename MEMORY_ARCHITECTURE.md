@@ -24,8 +24,8 @@ AI: "What were A B C D again?"                    ← AMNESIA
 | Post-summary amnesia | No task re-injection after summarization | **Active Task Injection** — after summary, re-injects the original request + tool call count |
 | No checkpoints | 55 tool calls with no state saved to disk | **Forced Checkpoints** — saves task state to file every 30 tool calls |
 | Agent doesn't save learnings | Workspace memory tools exist but AI never calls them | **Mandatory Save Triggers** — system prompt gives explicit WHEN+HOW examples |
-| Overflow message unclear | "Output offloaded to file" didn't tell AI how to read it | **Actionable Overflow** — gives exact `read_file({ path: "..." })` call |
-| Overflow directory grows forever | No cleanup of old overflow files | **Auto-Cleanup** — keeps only last 50 overflow files |
+| Large tool output | File-based overflow was messy | **SQLite Offloading** — logs full output to DB, keeps preview in context |
+| Data persistence | File cleanup was manual/incomplete | **DB Storage** — structured storage in `tool_executions` table |
 
 ---
 
@@ -69,7 +69,7 @@ AI: "What were A B C D again?"                    ← AMNESIA
 │     4. Re-inject: [ACTIVE TASK] + original request           │
 │     5. Keep last 15 messages raw                             │
 │                                                               │
-│  [Older tool results] → [COMPRESSED to 150 chars]            │
+│  [Tool Call Output] → [PREVIEW (400 chars)] + [DB ID]       │
 │                                                               │
 │  IF tokens > 40k → SUMMARIZE                                │
 │  IF tokens > 120k → FALLBACK: keep only last 10-20 msgs     │
@@ -79,7 +79,8 @@ AI: "What were A B C D again?"                    ← AMNESIA
 │               PERSISTENT STORAGE                              │
 │                                                               │
 │  SQLite DB (.agent/.ai-agent-chat.sqlite)                    │
-│    └── agents / chat_sessions / chat (messages)              │
+│    ├── agents / chat_sessions / chat (messages)              │
+│    └── tool_executions (full output storage)                 │
 │                                                               │
 │  Workspace Files (~/.agent/workspace/)                        │
 │    ├── SOUL.md        (identity + behavioral rules)          │
@@ -96,9 +97,6 @@ AI: "What were A B C D again?"                    ← AMNESIA
 │  Task State (.agent/{agentId}/active_task.md)                │
 │    └── Survives summarization — contains original request,   │
 │        initial plan, recent tool activity, tool call count    │
-│                                                               │
-│  Overflow Files (.agent/overflow/)                            │
-│    └── overflow_<timestamp>_<tool>.txt (auto-cleaned, max 50)│
 │                                                               │
 │  Archive (.agent/archive/)                                    │
 │    └── <agent>_<timestamp>.json                              │

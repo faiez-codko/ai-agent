@@ -99,9 +99,9 @@ Large files or command outputs no longer crash the agent or fill up its context 
 
 *   **The Problem**: Reading a 500-line log file used to consume the entire AI context window, leading to "Memory Full" errors or forgetfulness.
 *   **The Solution**: 
-    *   If a tool's output is larger than **3,000 characters**, the agent automatically saves it to a file (`.agent/overflow/`).
-    *   Only a **500-character preview** is kept in the active chat.
-    *   The agent can choose to read the full file later if it specifically needs that data.
+    *   If a tool's output is large (e.g. > 2000 characters), the agent automatically logs the full output to a local SQLite database (`.agent/.ai-agent-chat.sqlite`).
+    *   Only a **preview** (e.g. 400 characters) is kept in the active chat context to save tokens.
+    *   The agent can retrieve the full output using `read_tool_output` if it specifically needs that data.
 *   **Result**: You can paste huge logs or read massive codebases without breaking the agent.
 
 ## 🎧 Audio Capabilities (New!)

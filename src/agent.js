@@ -3,7 +3,7 @@ import { readFile, writeFile, listFiles } from './tools/fs.js';
 import { runCommand } from './tools/shell.js';
 import { tools as toolImplementations, toolDefinitions } from './tools/index.js';
 import { loadPersona } from './personas/index.js';
-import { loadChatHistory, saveChatHistory } from './chatStorage.js';
+import { loadChatHistory, saveChatHistory, logToolExecution } from './chatStorage.js';
 import { summarizeMemory, saveTaskState } from './memory/summary.js';
 import { loadWorkspaceContext } from './memory/workspace.js';
 import { sendMessage as sendTelegramMessage } from './tools/telegram.js';
@@ -35,6 +35,8 @@ export class Agent {
         // Tools will be filtered in init()
         this.toolsDefinition = [];
         this.tools = {};
+        
+        this.sessionId = null; // Track current session ID for DB logging
 
         // Task anchoring — tracks the original user request to prevent drift
         this._currentTaskGoal = null;
@@ -74,20 +76,6 @@ export class Agent {
                 console.error('Failed to create script directory:', e);
             }
         }
-
-        // Clean up old overflow files (keep last 50)
-        try {
-            const overflowDir = path.join(process.cwd(), '.agent', 'overflow');
-            if (fs.existsSync(overflowDir)) {
-                const files = fs.readdirSync(overflowDir)
-                    .filter(f => f.startsWith('overflow_'))
-                    .sort()
-                    .reverse();
-                for (const file of files.slice(50)) {
-                    fs.unlinkSync(path.join(overflowDir, file));
-                }
-            }
-        } catch (e) { /* ignore */ }
 
         // Use a unique sub-directory for this agent's planning files if id is provided
         const agentDir = this.id !== 'default' ? `.agent/${this.id}` : '.agent';
@@ -139,15 +127,17 @@ For complex tasks:
 
         // Load chat history
         try {
-            const history = await loadChatHistory(this.id);
-            if (history && history.length > 0) {
+            const { messages, sessionId } = await loadChatHistory(this.id);
+            if (sessionId) this.sessionId = sessionId;
+            
+            if (messages && messages.length > 0) {
                 // Update system prompt in history or prepend it
-                if (history[0].role === 'system') {
-                    history[0].content = systemPrompt;
+                if (messages[0].role === 'system') {
+                    messages[0].content = systemPrompt;
                 } else {
-                    history.unshift({ role: 'system', content: systemPrompt });
+                    messages.unshift({ role: 'system', content: systemPrompt });
                 }
-                this.memory = history;
+                this.memory = messages;
             }
         } catch (e) {
             console.error("Failed to load chat history:", e);
@@ -160,6 +150,15 @@ For complex tasks:
     async chat(userMessage, confirmCallback = null, onUpdate = null) {
         this.memory.push({ role: 'user', content: userMessage });
 
+        // Ensure session exists immediately so we can log tool calls
+        if (!this.sessionId) {
+            try {
+                this.sessionId = await saveChatHistory(this.id, this.memory, this);
+            } catch (e) {
+                console.error("Failed to create session for DB logging:", e);
+            }
+        }
+
         // ─── Task Anchoring: Track the original goal ───
         // Store the FULL user message as the raw goal
         this._currentTaskGoal = userMessage;
@@ -170,8 +169,8 @@ For complex tasks:
         await summarizeMemory(this);
 
         let loopCount = 0;
-        const MAX_LOOPS = 50;
-        const CHECKPOINT_INTERVAL = 30; // Force checkpoint every N tool calls
+        const MAX_LOOPS = 60;
+        const CHECKPOINT_INTERVAL = 50; // Force checkpoint every N tool calls
         let finalResponse = null;
 
         if (onUpdate) onUpdate({ type: 'thinking', message: 'Analyzing request...' });
@@ -294,35 +293,29 @@ For complex tasks:
                     'db_query', 'db_schema', 'analyze_image', 'desktop_screenshot'
                 ]);
 
-                // CONTEXT OPTIMIZATION: Offload large tool outputs to file
+                // CONTEXT OPTIMIZATION: Offload large tool outputs to SQLite DB
                 // BUT: context-critical tools keep a much larger preview
                 const isCritical = CONTEXT_CRITICAL_TOOLS.has(toolName);
                 const MAX_OUTPUT_LENGTH = isCritical ? 8000 : 2000;
 
+                // Always log full output to DB if session exists
+                let executionId = null;
+                if (this.sessionId) {
+                    executionId = await logToolExecution(this.sessionId, toolName, args, memoryContent);
+                }
+
                 if (memoryContent.length > MAX_OUTPUT_LENGTH) {
-                    try {
-                        const overflowDir = path.join(process.cwd(), '.agent', 'overflow');
-                        if (!fs.existsSync(overflowDir)) {
-                            fs.mkdirSync(overflowDir, { recursive: true });
-                        }
+                    const previewLen = isCritical ? 4000 : 400;
+                    const preview = memoryContent.substring(0, previewLen);
+                    
+                    const dbInfo = executionId ? `(DB ID: ${executionId})` : '(DB logging failed)';
+                    const readCmd = executionId 
+                        ? `read_tool_output({ id: ${executionId} })` 
+                        : `(Consult admin: Tool output too large and DB log failed)`;
 
-                        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                        const safeToolName = toolName.replace(/[^a-zA-Z0-9]/g, '_');
-                        const filename = `overflow_${timestamp}_${safeToolName}.txt`;
-                        const filePath = path.join(overflowDir, filename);
+                    memoryContent = `[SYSTEM: Full output stored in SQLite ${dbInfo} — Length: ${memoryContent.length} chars.\nTo read the full output, call: ${readCmd}\n\nPreview:\n${preview}...]`;
 
-                        fs.writeFileSync(filePath, memoryContent);
-
-                        // Critical tools get a longer preview so the AI can still work with the data
-                        const previewLen = isCritical ? 4000 : 400;
-                        const preview = memoryContent.substring(0, previewLen);
-                        memoryContent = `[SYSTEM: Full output saved to file (${memoryContent.length} chars). Below is a preview.\nFull path: ${filePath}\nTo read the full output, call: read_file({ path: "${filePath.replace(/\\/g, '/')}" })\n\nPreview:\n${preview}...]`;
-
-                        console.log(chalk.yellow(`⚠️  Tool output offloaded to ${filename} (${memoryContent.length} chars)`));
-                    } catch (err) {
-                        console.error('Failed to offload large tool output:', err);
-                        memoryContent = memoryContent.substring(0, MAX_OUTPUT_LENGTH) + '... [Truncated due to error]';
-                    }
+                    console.log(chalk.yellow(`⚠️  Tool output offloaded to DB ${executionId} (${memoryContent.length} chars)`));
                 }
 
                 this.memory.push({

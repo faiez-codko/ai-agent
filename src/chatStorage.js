@@ -53,6 +53,19 @@ async function initDb() {
         );
     `);
 
+    // 4. Tool Executions Table (New)
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS tool_executions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            tool_name TEXT NOT NULL,
+            args TEXT,
+            output TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+        );
+    `);
+
     // Migration Check
     try {
         const legacyTable = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='chat_history'");
@@ -113,7 +126,7 @@ export async function loadChatHistory(agentId) {
         );
 
         if (!session) {
-            return [];
+            return { messages: [], sessionId: null };
         }
 
         const rows = await db.all(
@@ -121,22 +134,51 @@ export async function loadChatHistory(agentId) {
             session.id
         );
 
-        return rows.map(row => {
-            const msg = {
-                role: row.role,
-                content: row.content
-            };
-            if (row.tool_calls) {
-                try { msg.tool_calls = JSON.parse(row.tool_calls); } catch (e) {}
-            }
-            if (row.tool_call_id) msg.tool_call_id = row.tool_call_id;
-            if (row.name) msg.name = row.name;
-            return msg;
-        });
+        return {
+            messages: rows.map(row => {
+                const msg = {
+                    role: row.role,
+                    content: row.content
+                };
+                if (row.tool_calls) {
+                    try { msg.tool_calls = JSON.parse(row.tool_calls); } catch (e) {}
+                }
+                if (row.tool_call_id) msg.tool_call_id = row.tool_call_id;
+                if (row.name) msg.name = row.name;
+                return msg;
+            }),
+            sessionId: session.id
+        };
 
     } catch (error) {
         console.error("Error loading chat history:", error);
-        return [];
+        return { messages: [], sessionId: null };
+    }
+}
+
+export async function logToolExecution(sessionId, toolName, args, output) {
+    if (!sessionId) return null;
+    try {
+        const db = await getDb();
+        const result = await db.run(
+            `INSERT INTO tool_executions (session_id, tool_name, args, output) VALUES (?, ?, ?, ?)`,
+            [sessionId, toolName, JSON.stringify(args), output]
+        );
+        return result.lastID;
+    } catch (error) {
+        console.error("Error logging tool execution:", error);
+        return null;
+    }
+}
+
+export async function getToolExecution(id) {
+    try {
+        const db = await getDb();
+        const row = await db.get("SELECT output FROM tool_executions WHERE id = ?", id);
+        return row ? row.output : null;
+    } catch (error) {
+        console.error("Error getting tool execution:", error);
+        return null;
     }
 }
 
@@ -178,7 +220,8 @@ export async function saveChatHistory(agentId, messages, agentInstance = null) {
     // Strategy: Delete all for this session and re-insert. 
     // This handles pruning/summarization correctly (where old messages are removed from memory).
     await db.run("DELETE FROM chat WHERE session_id = ?", session.id);
-
+    
+    // Prepare statement for bulk insert
     const stmt = await db.prepare(
         "INSERT INTO chat (session_id, role, content, tool_calls, tool_call_id, name) VALUES (?, ?, ?, ?, ?, ?)"
     );
@@ -194,6 +237,8 @@ export async function saveChatHistory(agentId, messages, agentInstance = null) {
         );
     }
     await stmt.finalize();
+
+    return session.id;
 }
 
 export async function clearChatHistory(agentId = null) {

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
 import { loadCheckpoint, listCheckpoints } from '../memory/checkpoints.js';
+import { getToolExecution } from '../chatStorage.js';
 
 const MEMORY_DIR = path.join(process.cwd(), '.agent', 'memory');
 
@@ -173,6 +174,17 @@ ${content}
                    checkpoints.map(c => `- ${c.id} (${c.timestamp}): ${c.summary}`).join('\n');
         } catch (error) {
             return `Error listing checkpoints: ${error.message}`;
+        }
+    },
+
+    // Read full tool output from SQLite
+    read_tool_output: async ({ id }) => {
+        try {
+            const output = await getToolExecution(id);
+            if (!output) return `Tool execution ${id} not found or has no output.`;
+            return output;
+        } catch (error) {
+            return `Error reading tool output: ${error.message}`;
         }
     }
 };

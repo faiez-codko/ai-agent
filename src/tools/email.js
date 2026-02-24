@@ -12,7 +12,7 @@ async function getEmailConfig() {
 }
 
 export const emailTools = {
-    send_email: async ({ to, subject, body }) => {
+    send_email: async ({ to, subject, body, attachments = [] }) => {
         try {
             const config = await getEmailConfig();
             
@@ -26,12 +26,20 @@ export const emailTools = {
                 }
             });
 
-            const info = await transporter.sendMail({
+            const mailOptions = {
                 from: config.user,
                 to,
                 subject,
                 text: body
-            });
+            };
+
+            if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+                mailOptions.attachments = attachments.map(filePath => ({
+                    path: filePath
+                }));
+            }
+
+            const info = await transporter.sendMail(mailOptions);
 
             return `Email sent: ${info.messageId}`;
         } catch (error) {
@@ -111,7 +119,12 @@ export const emailToolDefinitions = [
             properties: {
                 to: { type: "string", description: "Recipient email address" },
                 subject: { type: "string", description: "Email subject" },
-                body: { type: "string", description: "Email body text" }
+                body: { type: "string", description: "Email body text" },
+                attachments: { 
+                    type: "array", 
+                    items: { type: "string" },
+                    description: "List of absolute file paths to attach"
+                }
             },
             required: ["to", "subject", "body"]
         }
