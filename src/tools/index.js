@@ -149,11 +149,12 @@ export const toolDefinitions = [
   },
   {
     name: "browser_visit",
-    description: "Visit a URL and get its text content. Use this to read documentation or web pages.",
+    description: "Visit a URL and get page content. Supports text mode (default) or accessibility tree mode (a11y).",
     parameters: {
       type: "object",
       properties: {
-        url: { type: "string", description: "The URL to visit." }
+        url: { type: "string", description: "The URL to visit." },
+        mode: { type: "string", description: "Optional mode: 'text' (default) or 'a11y' for accessibility tree." }
       },
       required: ["url"]
     }
@@ -168,6 +169,17 @@ export const toolDefinitions = [
         engine: { type: "string", description: "Optional engine override: google, bing, or duckduckgo." }
       },
       required: ["query"]
+    }
+  },
+  {
+    name: "browser_refresh",
+    description: "Refresh the current browser page and return content in text or accessibility-tree mode.",
+    parameters: {
+      type: "object",
+      properties: {
+        mode: { type: "string", description: "Optional mode: 'text' (default) or 'a11y'." },
+        waitUntil: { type: "string", description: "Optional Puppeteer waitUntil: load, domcontentloaded, networkidle0, networkidle2." }
+      }
     }
   },
   {

@@ -127,6 +127,51 @@ async function detectCaptcha(page) {
     });
 }
 
+async function getCleanAccessibilityContext(page) {
+    const snapshot = await page.accessibility.snapshot();
+
+    function simplify(node) {
+        if (!node) return null;
+
+        const simplified = {
+            role: node.role,
+            name: node.name || '',
+            ...(node.value != null ? { value: node.value } : {}),
+            ...(node.description ? { description: node.description } : {})
+        };
+
+        if (node.children?.length) {
+            const children = node.children.map(simplify).filter(Boolean);
+            if (children.length) simplified.children = children;
+        }
+
+        return simplified;
+    }
+
+    return JSON.stringify(simplify(snapshot), null, 2);
+}
+
+async function buildPageContentResponse(page, { urlOverride = null, mode = 'text' } = {}) {
+    const title = await page.title();
+    const currentUrl = urlOverride || page.url();
+    const normalizedMode = String(mode || 'text').toLowerCase();
+
+    if (normalizedMode === 'a11y') {
+        const a11yTree = await getCleanAccessibilityContext(page);
+        const truncated = a11yTree.length > 12000 ? `${a11yTree.slice(0, 12000)}\n... (truncated)` : a11yTree;
+        return `URL: ${currentUrl}\nTitle: ${title}\nMode: a11y\n\nAccessibility Tree:\n${truncated}`;
+    }
+
+    const content = await page.evaluate(() => {
+        const clone = document.body.cloneNode(true);
+        const scripts = clone.querySelectorAll('script, style, noscript');
+        scripts.forEach(s => s.remove());
+        return clone.innerText;
+    });
+
+    return `URL: ${currentUrl}\nTitle: ${title}\nMode: text\n\nContent Preview:\n${content.slice(0, 6000)}${content.length > 6000 ? '\n... (truncated)' : ''}`;
+}
+
 async function handleCaptchaIfNeeded(page, agent, contextLabel = 'browser') {
     const config = getBrowserConfig(agent);
     if (config.captcha?.autoDetect === false) return null;
@@ -207,26 +252,57 @@ async function getBrowser(agent) {
 }
 
 export const browser_tools = {
-    browser_visit: async ({ url }, { agent }) => {
+    browser_visit: async ({ url, mode }, { agent }) => {
         const { page } = await getBrowser(agent);
         try {
             console.log(`Navigating to ${url}...`);
             await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
             const captchaMsg = await handleCaptchaIfNeeded(page, agent, `visit:${url}`);
             if (captchaMsg) return captchaMsg;
-            
-            const title = await page.title();
-            const content = await page.evaluate(() => {
-                // Helper to remove scripts and styles for cleaner text
-                const clone = document.body.cloneNode(true);
-                const scripts = clone.querySelectorAll('script, style, noscript');
-                scripts.forEach(s => s.remove());
-                return clone.innerText;
-            });
 
-            return `URL: ${url}\nTitle: ${title}\n\nContent Preview:\n${content.slice(0, 6000)}${content.length > 6000 ? '\n... (truncated)' : ''}`;
+            try {
+                return await buildPageContentResponse(page, { urlOverride: url, mode });
+            } catch (a11yError) {
+                if (String(mode || 'text').toLowerCase() === 'a11y') {
+                    console.warn(`Accessibility snapshot failed, falling back to text mode: ${a11yError.message}`);
+                    return await buildPageContentResponse(page, { urlOverride: url, mode: 'text' });
+                }
+                throw a11yError;
+            }
         } catch (e) {
             return `Error visiting ${url}: ${e.message}`;
+        }
+    },
+
+    browser_refresh: async ({ mode, waitUntil }, { agent }) => {
+        const { page } = await getBrowser(agent);
+        try {
+            const currentUrl = page.url();
+            if (!currentUrl || currentUrl === 'about:blank') {
+                return 'No page loaded to refresh. Use browser_visit first.';
+            }
+
+            const waitMode = ['load', 'domcontentloaded', 'networkidle0', 'networkidle2'].includes(String(waitUntil || 'networkidle2'))
+                ? String(waitUntil || 'networkidle2')
+                : 'networkidle2';
+
+            console.log(`Refreshing ${currentUrl}...`);
+            await page.reload({ waitUntil: waitMode, timeout: 30000 });
+
+            const captchaMsg = await handleCaptchaIfNeeded(page, agent, `refresh:${currentUrl}`);
+            if (captchaMsg) return captchaMsg;
+
+            try {
+                return await buildPageContentResponse(page, { mode });
+            } catch (a11yError) {
+                if (String(mode || 'text').toLowerCase() === 'a11y') {
+                    console.warn(`Accessibility snapshot failed after refresh, falling back to text mode: ${a11yError.message}`);
+                    return await buildPageContentResponse(page, { mode: 'text' });
+                }
+                throw a11yError;
+            }
+        } catch (e) {
+            return `Error refreshing page: ${e.message}`;
         }
     },
 
