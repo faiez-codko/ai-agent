@@ -11,6 +11,11 @@ function getBrowserConfig(agent) {
         const globalCaptcha = globalBrowserConfig.captcha || {};
         agent.browserConfig = {
             headless: globalBrowserConfig.headless ?? false,
+            browserless: {
+                enabled: globalBrowserConfig.browserless?.enabled ?? false,
+                endpoint: globalBrowserConfig.browserless?.endpoint || 'wss://production-sfo.browserless.io',
+                token: globalBrowserConfig.browserless?.token || null
+            },
             proxy: globalProxy ? {
                 server: globalProxy.server || globalProxy.url || null,
                 username: globalProxy.username || null,
@@ -214,22 +219,35 @@ async function getBrowser(agent) {
     }
 
     console.log("Launching browser...");
-    const launchArgs = [
+    const browserlessEnabled = config.browserless?.enabled && config.browserless?.endpoint && config.browserless?.token;
+    let browser;
+
+    if (browserlessEnabled) {
+        const endpoint = config.browserless.endpoint.trim();
+        const separator = endpoint.includes('?') ? '&' : '?';
+        const wsEndpoint = `${endpoint}${separator}token=${encodeURIComponent(config.browserless.token)}`;
+        console.log(`Connecting to Browserless at ${endpoint}...`);
+        browser = await puppeteer.connect({
+            browserWSEndpoint: wsEndpoint
+        });
+    } else {
+        const launchArgs = [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu'
-    ];
-    if (config.proxy?.server) {
-        launchArgs.push(`--proxy-server=${config.proxy.server}`);
-        if (config.proxy.bypass) {
-            launchArgs.push(`--proxy-bypass-list=${config.proxy.bypass}`);
+        ];
+        if (config.proxy?.server) {
+            launchArgs.push(`--proxy-server=${config.proxy.server}`);
+            if (config.proxy.bypass) {
+                launchArgs.push(`--proxy-bypass-list=${config.proxy.bypass}`);
+            }
         }
+        browser = await puppeteer.launch({
+            headless: config.headless,
+            args: launchArgs
+        });
     }
-    const browser = await puppeteer.launch({
-        headless: config.headless,
-        args: launchArgs
-    });
     
     // Create a new page or use the default one
     const pages = await browser.pages();

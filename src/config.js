@@ -9,6 +9,11 @@ const DEFAULT_CONFIG = {
   browser: {
     searchEngine: 'duckduckgo',
     headless: false,
+    browserless: {
+      enabled: false,
+      endpoint: 'wss://production-sfo.browserless.io',
+      token: null
+    },
     proxy: null,
     captcha: {
       mode: 'manual',
@@ -29,6 +34,10 @@ export async function loadConfig() {
       browser: {
         ...DEFAULT_CONFIG.browser,
         ...(parsed.browser || {}),
+        browserless: {
+          ...DEFAULT_CONFIG.browser.browserless,
+          ...(parsed.browser?.browserless || {})
+        },
         captcha: {
           ...DEFAULT_CONFIG.browser.captcha,
           ...(parsed.browser?.captcha || {})

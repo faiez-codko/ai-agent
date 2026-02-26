@@ -486,6 +486,27 @@ export async function setup() {
                 default: config.browser?.headless ?? false
             },
             {
+                type: 'confirm',
+                name: 'browserlessEnabled',
+                message: 'Use Browserless remote browser (for captcha-prone flows)?',
+                default: config.browser?.browserless?.enabled ?? false
+            },
+            {
+                type: 'input',
+                name: 'browserlessEndpoint',
+                message: 'Browserless WebSocket endpoint (without token query):',
+                default: config.browser?.browserless?.endpoint || 'wss://production-sfo.browserless.io',
+                when: (answers) => answers.browserlessEnabled
+            },
+            {
+                type: 'password',
+                name: 'browserlessToken',
+                message: 'Browserless API token:',
+                mask: '*',
+                default: config.browser?.browserless?.token || '',
+                when: (answers) => answers.browserlessEnabled
+            },
+            {
                 type: 'input',
                 name: 'proxyServer',
                 message: 'Proxy server URL (optional, e.g. http://host:port or socks5://host:port):',
@@ -547,6 +568,15 @@ export async function setup() {
             ...(config.browser || {}),
             searchEngine: browserAnswers.searchEngine,
             headless: browserAnswers.headless,
+            browserless: browserAnswers.browserlessEnabled ? {
+                enabled: true,
+                endpoint: browserAnswers.browserlessEndpoint || 'wss://production-sfo.browserless.io',
+                token: browserAnswers.browserlessToken || null
+            } : {
+                enabled: false,
+                endpoint: config.browser?.browserless?.endpoint || 'wss://production-sfo.browserless.io',
+                token: null
+            },
             proxy: browserAnswers.proxyServer ? {
                 server: browserAnswers.proxyServer,
                 username: browserAnswers.proxyUsername || '',
