@@ -3,16 +3,40 @@ import path from 'path';
 import os from 'os';
 
 const CONFIG_FILE = path.join(os.homedir(), '.ai-agent-config.json');
+const DEFAULT_CONFIG = {
+  provider: 'openai',
+  model: 'gpt-4o',
+  browser: {
+    searchEngine: 'duckduckgo',
+    headless: false,
+    proxy: null,
+    captcha: {
+      mode: 'manual',
+      provider: null,
+      apiKey: null,
+      autoDetect: true
+    }
+  }
+};
 
 export async function loadConfig() {
   try {
     const data = await fs.readFile(CONFIG_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
+    const parsed = JSON.parse(data);
     return {
-      provider: 'openai', // default
-      model: 'gpt-4o',
+      ...DEFAULT_CONFIG,
+      ...parsed,
+      browser: {
+        ...DEFAULT_CONFIG.browser,
+        ...(parsed.browser || {}),
+        captcha: {
+          ...DEFAULT_CONFIG.browser.captcha,
+          ...(parsed.browser?.captcha || {})
+        }
+      }
     };
+  } catch (error) {
+    return { ...DEFAULT_CONFIG };
   }
 }
 

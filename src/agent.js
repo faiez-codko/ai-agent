@@ -31,6 +31,7 @@ export class Agent {
 
         this.manager = config.manager || null;
         this.safeMode = config.safeMode || false; // If true, requires confirmation for side-effects
+        this.config = config || {};
 
         // Tools will be filtered in init()
         this.toolsDefinition = [];

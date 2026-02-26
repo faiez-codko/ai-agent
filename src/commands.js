@@ -206,7 +206,8 @@ export async function setup() {
     console.log(chalk.grey.bold('5. Email Integration (Gmail/SMTP)'));
     console.log(chalk.grey.bold('6. Audio Configuration'));
     console.log(chalk.grey.bold('7. WhatsApp Configuration'));
-    console.log(chalk.grey.bold('8. Exit'));
+    console.log(chalk.grey.bold('8. Browser Configuration'));
+    console.log(chalk.grey.bold('9. Exit'));
     const { action } = await inquirer.prompt([
       {
         type: 'list',
@@ -220,12 +221,13 @@ export async function setup() {
           { name: '5. Email Integration (Gmail/SMTP)', value: '5' },
           { name: '6. Audio Configuration', value: '6' },
           { name: '7. WhatsApp Configuration', value: '7' },
-          { name: 'Exit', value: '8' }
+          { name: '8. Browser Configuration', value: '8' },
+          { name: 'Exit', value: '9' }
         ]
       }
     ]);
 
-    if (action === '8') {
+    if (action === '9') {
       console.log(chalk.green('Setup completed.'));
       break;
     }
@@ -468,6 +470,99 @@ export async function setup() {
         
         await saveConfig(config);
         console.log(chalk.green('WhatsApp configuration saved!'));
+    } else if (action === '8') {
+        const browserAnswers = await inquirer.prompt([
+            {
+                type: 'list',
+                name: 'searchEngine',
+                message: 'Default browser search engine:',
+                choices: ['duckduckgo', 'google', 'bing'],
+                default: config.browser?.searchEngine || 'duckduckgo'
+            },
+            {
+                type: 'confirm',
+                name: 'headless',
+                message: 'Run Puppeteer in headless mode?',
+                default: config.browser?.headless ?? false
+            },
+            {
+                type: 'input',
+                name: 'proxyServer',
+                message: 'Proxy server URL (optional, e.g. http://host:port or socks5://host:port):',
+                default: config.browser?.proxy?.server || ''
+            },
+            {
+                type: 'input',
+                name: 'proxyUsername',
+                message: 'Proxy username (optional):',
+                default: config.browser?.proxy?.username || '',
+                when: (answers) => !!answers.proxyServer
+            },
+            {
+                type: 'password',
+                name: 'proxyPassword',
+                message: 'Proxy password (optional):',
+                mask: '*',
+                default: config.browser?.proxy?.password || '',
+                when: (answers) => !!answers.proxyServer
+            },
+            {
+                type: 'input',
+                name: 'proxyBypass',
+                message: 'Proxy bypass list (optional):',
+                default: config.browser?.proxy?.bypass || '',
+                when: (answers) => !!answers.proxyServer
+            },
+            {
+                type: 'list',
+                name: 'captchaMode',
+                message: 'Captcha handling mode:',
+                choices: ['manual', 'provider', 'none'],
+                default: config.browser?.captcha?.mode || 'manual'
+            },
+            {
+                type: 'input',
+                name: 'captchaProvider',
+                message: 'Captcha provider name (e.g. 2captcha, capsolver):',
+                default: config.browser?.captcha?.provider || '',
+                when: (answers) => answers.captchaMode === 'provider'
+            },
+            {
+                type: 'password',
+                name: 'captchaApiKey',
+                message: 'Captcha provider API key:',
+                mask: '*',
+                default: config.browser?.captcha?.apiKey || '',
+                when: (answers) => answers.captchaMode === 'provider'
+            },
+            {
+                type: 'confirm',
+                name: 'captchaAutoDetect',
+                message: 'Enable captcha auto-detection?',
+                default: config.browser?.captcha?.autoDetect ?? true
+            }
+        ]);
+
+        config.browser = {
+            ...(config.browser || {}),
+            searchEngine: browserAnswers.searchEngine,
+            headless: browserAnswers.headless,
+            proxy: browserAnswers.proxyServer ? {
+                server: browserAnswers.proxyServer,
+                username: browserAnswers.proxyUsername || '',
+                password: browserAnswers.proxyPassword || '',
+                bypass: browserAnswers.proxyBypass || ''
+            } : null,
+            captcha: {
+                mode: browserAnswers.captchaMode,
+                provider: browserAnswers.captchaProvider || null,
+                apiKey: browserAnswers.captchaApiKey || null,
+                autoDetect: browserAnswers.captchaAutoDetect
+            }
+        };
+
+        await saveConfig(config);
+        console.log(chalk.green('Browser configuration saved!'));
     }
   }
 }
@@ -475,7 +570,7 @@ export async function setup() {
 export async function read(filePath, query, agentInstance = null) {
   const spinner = ora('Analyzing file...').start();
   try {
-    const agent = agentInstance || new Agent();
+    const agent = agentInstance || new Agent(await loadConfig());
     if (!agentInstance) await agent.init();
     
     const result = await agent.analyzeFile(filePath, query);
@@ -500,7 +595,7 @@ export async function update(filePath, instruction, agentInstance = null) {
 
   const spinner = ora('Updating file...').start();
   try {
-    const agent = agentInstance || new Agent();
+    const agent = agentInstance || new Agent(await loadConfig());
     if (!agentInstance) await agent.init();
     
     // Read original content for simple diff or backup
@@ -543,7 +638,7 @@ export async function update(filePath, instruction, agentInstance = null) {
 export async function fix(filePath, agentInstance = null) {
   const spinner = ora('Fixing file...').start();
   try {
-    const agent = agentInstance || new Agent();
+    const agent = agentInstance || new Agent(await loadConfig());
     if (!agentInstance) await agent.init();
     
     // Read file
@@ -587,7 +682,7 @@ export async function fix(filePath, agentInstance = null) {
 export async function run(instruction, agentInstance = null) {
   const spinner = ora('Generating command...').start();
   try {
-    const agent = agentInstance || new Agent();
+    const agent = agentInstance || new Agent(await loadConfig());
     if (!agentInstance) await agent.init();
 
     const command = await agent.generateCommand(instruction);

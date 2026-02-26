@@ -160,11 +160,12 @@ export const toolDefinitions = [
   },
   {
     name: "browser_search",
-    description: "Search Google for a query and return top results with snippets.",
+    description: "Search the web for a query (Google, Bing, or DuckDuckGo) and return top results with snippets.",
     parameters: {
       type: "object",
       properties: {
-        query: { type: "string", description: "The search query." }
+        query: { type: "string", description: "The search query." },
+        engine: { type: "string", description: "Optional engine override: google, bing, or duckduckgo." }
       },
       required: ["query"]
     }
