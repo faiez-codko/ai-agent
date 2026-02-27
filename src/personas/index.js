@@ -13,9 +13,7 @@ You are the PRIMARY agent. The user talks to YOU. You can:
 2. Delegate specialized work to sub-agents using the 'delegate_task' tool
 
 ## AVAILABLE SPECIALIST AGENTS
-- \`scraper\` (Web Scraping Expert): Web scraping, data extraction, site audits, browser automation
-- \`coder\` (Coding Expert): Complex coding tasks, refactoring, debugging, architecture
-- \`leadgen\` (B2B Lead Generation Expert): Lead research, prospect scraping, CRM data, outreach prep
+ ~ note check for available agents
 
 ## DELEGATION RULES
 1. Delegate when a task clearly matches a specialist's expertise AND is complex enough to warrant it.
@@ -118,15 +116,83 @@ export async function savePersona(persona) {
     return persona;
 }
 
+function parseGithubRepoUrl(url) {
+    try {
+        const parsed = new URL(url);
+        if (!/^(www\.)?github\.com$/i.test(parsed.hostname)) return null;
+        const parts = parsed.pathname.split('/').filter(Boolean);
+        if (parts.length < 2) return null;
+        return {
+            owner: parts[0],
+            repo: parts[1].replace(/\.git$/i, '')
+        };
+    } catch {
+        return null;
+    }
+}
+
+async function fetchTextFromUrl(url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+    }
+    return response.text();
+}
+
+async function fetchSkillFromGithubRepo(repoUrl, skillName) {
+    const repo = parseGithubRepoUrl(repoUrl);
+    if (!repo) return null;
+
+    const normalized = normalizeSkillId(skillName);
+    if (!normalized) {
+        throw new Error(`Invalid skill name: ${skillName}`);
+    }
+
+    const branchNames = ['main', 'master', 'refs/heads/main', 'refs/heads/master'];
+    const skillDirs = [normalized, skillName];
+    const relativePaths = [];
+
+    for (const dir of skillDirs) {
+        relativePaths.push(`${dir}/SKILL.md`);
+        relativePaths.push(`skills/${dir}/SKILL.md`);
+        relativePaths.push(`.claude/skills/${dir}/SKILL.md`);
+        relativePaths.push(`${dir}.md`);
+        relativePaths.push(`skills/${dir}.md`);
+        relativePaths.push(`.claude/skills/${dir}.md`);
+    }
+
+    const candidates = [];
+    for (const branch of branchNames) {
+        for (const rel of relativePaths) {
+            candidates.push(`https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${branch}/${rel}`);
+        }
+    }
+
+    const errors = [];
+    for (const candidate of candidates) {
+        try {
+            const content = await fetchTextFromUrl(candidate);
+            return { content, resolvedUrl: candidate };
+        } catch (error) {
+            errors.push(error.message);
+        }
+    }
+
+    throw new Error(`Could not find skill '${skillName}' in GitHub repo ${repo.owner}/${repo.repo}`);
+}
+
 export async function addSkillFromUrl(url, name) {
     await ensureSkillsDir();
     try {
-        console.log(`Fetching skill from ${url}...`);
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+        let content;
+        const repoResult = await fetchSkillFromGithubRepo(url, name);
+        if (repoResult) {
+            console.log(`Fetching skill '${name}' from GitHub repo: ${repoResult.resolvedUrl}...`);
+            content = repoResult.content;
+        } else {
+            console.log(`Fetching skill from ${url}...`);
+            content = await fetchTextFromUrl(url);
         }
-        const content = await response.text();
         
         // Basic check: if it's a GitHub repo URL (not raw), warn the user or try to fetch raw?
         // For now, just save the content.
@@ -136,4 +202,91 @@ export async function addSkillFromUrl(url, name) {
     } catch (error) {
         throw new Error(`Failed to add skill: ${error.message}`);
     }
+}
+
+function normalizeSkillId(raw) {
+    return raw
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-_]/g, '');
+}
+
+async function addSkillFromFile(filePath, name) {
+    const content = await fs.readFile(filePath, 'utf-8');
+    const skillId = normalizeSkillId(name || path.basename(filePath, path.extname(filePath)));
+    if (!skillId) {
+        throw new Error(`Invalid skill name derived from file: ${filePath}`);
+    }
+    await savePersona({ id: skillId, systemPrompt: content });
+    return { id: skillId, size: content.length, source: filePath };
+}
+
+async function addSkillsFromFolder(folderPath) {
+    const entries = await fs.readdir(folderPath, { withFileTypes: true });
+    const imported = [];
+
+    const folderSkillFile = path.join(folderPath, 'SKILL.md');
+    try {
+        const stat = await fs.stat(folderSkillFile);
+        if (stat.isFile()) {
+            imported.push(await addSkillFromFile(folderSkillFile, path.basename(folderPath)));
+        }
+    } catch {
+        // Ignore if the folder has no top-level SKILL.md
+    }
+
+    for (const entry of entries) {
+        if (entry.isDirectory()) {
+            const subSkillPath = path.join(folderPath, entry.name, 'SKILL.md');
+            try {
+                const stat = await fs.stat(subSkillPath);
+                if (stat.isFile()) {
+                    imported.push(await addSkillFromFile(subSkillPath, entry.name));
+                }
+            } catch {
+                // Ignore non-skill directories
+            }
+        } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md') && entry.name !== 'SKILL.md') {
+            imported.push(await addSkillFromFile(path.join(folderPath, entry.name)));
+        }
+    }
+
+    if (imported.length === 0) {
+        throw new Error(`No skill files found in folder: ${folderPath}`);
+    }
+
+    return imported;
+}
+
+export async function addSkillFromSource(source, name) {
+    await ensureSkillsDir();
+    const isUrl = /^https?:\/\//i.test(source);
+    if (isUrl) {
+        if (!name) {
+            throw new Error('--skill <name> is required when adding from a URL');
+        }
+        const result = await addSkillFromUrl(source, name);
+        return { mode: 'single', imported: [result] };
+    }
+
+    const resolved = path.resolve(process.cwd(), source);
+    let stat;
+    try {
+        stat = await fs.stat(resolved);
+    } catch {
+        throw new Error(`Source not found: ${resolved}`);
+    }
+
+    if (stat.isFile()) {
+        const result = await addSkillFromFile(resolved, name);
+        return { mode: 'single', imported: [result] };
+    }
+
+    if (stat.isDirectory()) {
+        const imported = await addSkillsFromFolder(resolved);
+        return { mode: 'folder', imported };
+    }
+
+    throw new Error(`Unsupported source type: ${resolved}`);
 }

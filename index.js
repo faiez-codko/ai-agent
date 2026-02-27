@@ -121,8 +121,8 @@ if (process.argv.length <= 2) {
   const skills = program.command('skills').description('Manage Agent Skills');
 
   skills
-    .command('add <url>')
-    .description('Add a skill from a URL')
+    .command('add <source>')
+    .description('Add skill(s) from URL, local file, or folder')
     .option('--skill <name>', 'Name of the skill to create')
     .action(skillsAdd);
 

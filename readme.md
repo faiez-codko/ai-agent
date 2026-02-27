@@ -32,14 +32,23 @@ A powerful, multi-personality AI agent for your terminal. This tool allows you t
 The agent now supports a dynamic skills system that allows you to add specialized capabilities and knowledge bases from external sources (like GitHub repositories or Markdown files).
 
 #### Adding a Skill
-You can add a new skill by providing a URL to a Markdown file containing the skill definition (system prompt).
+You can add skill definitions from a URL, a local markdown file, or a local folder.
 
 ```bash
-# Syntax
+# URL syntax
 ai-agent skills add <URL> --skill <skill-name>
 
 # Example: Add a research assistant skill
 ai-agent skills add https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/refs/heads/master/lead-research-assistant/SKILL.md --skill research
+
+# GitHub repo syntax (Vercel/Claude skills-style)
+ai-agent skills add https://github.com/jeffallan/claude-skills --skill nextjs-developer
+
+# Local file syntax (name inferred from filename unless --skill is provided)
+ai-agent skills add ./skills/research.md
+
+# Local folder syntax (imports SKILL.md files from folder/subfolders)
+ai-agent skills add ./skills
 ```
 
 Once added, the skill becomes available as a specialized agent. You can delegate tasks to it:

@@ -12,7 +12,7 @@ import { tools, toolDefinitions } from './tools/index.js';
 import { routeToolCall } from './tools/router.js';
 import { listIntegrations as listInt, setupIntegration as setupInt } from './integrations/index.js';
 import { installMcpServer, listMcpServers, removeMcpServer, setMcpServerEnabled } from './mcp/index.js';
-import { addSkillFromUrl, listPersonas } from './personas/index.js';
+import { addSkillFromSource, listPersonas } from './personas/index.js';
 import { listSessions, getSession } from './chatStorage.js';
 import { parse } from 'json2csv';
 import path from 'path';
@@ -149,15 +149,19 @@ export async function sessionsExport(sessionId, options) {
     }
 }
 
-export async function skillsAdd(url, options) {
-    if (!options.skill) {
-        console.error(chalk.red('Error: --skill <name> is required.'));
-        process.exit(1);
-    }
-    
+export async function skillsAdd(source, options) {
     try {
-        const result = await addSkillFromUrl(url, options.skill);
-        console.log(chalk.green(`\n✓ Skill '${result.id}' added successfully! (${result.size} bytes)`));
+        const result = await addSkillFromSource(source, options.skill);
+        if (result.imported.length === 1) {
+            const skill = result.imported[0];
+            console.log(chalk.green(`\n✓ Skill '${skill.id}' added successfully! (${skill.size} bytes)`));
+            return;
+        }
+
+        console.log(chalk.green(`\n✓ Imported ${result.imported.length} skills:`));
+        for (const skill of result.imported) {
+            console.log(`- ${chalk.cyan(skill.id)} (${skill.size} bytes)`);
+        }
     } catch (error) {
         console.error(chalk.red(`\n✗ Failed to add skill: ${error.message}`));
         process.exit(1);
