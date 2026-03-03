@@ -1,4 +1,4 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, jidNormalizedUser, downloadMediaMessage } from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, jidNormalizedUser, downloadMediaMessage, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
 import path from 'path';
 import fs from 'fs';
@@ -21,9 +21,11 @@ export async function setupWhatsApp() {
 
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
+    const { version } = await fetchLatestBaileysVersion();
     const sock = makeWASocket({
         auth: state,
-        browser: ["AI Agent", "Chrome", "1.0.0"]
+        version,
+        browser: ["Windows", "Chrome", "128.0.0"]
     });
     setActiveSocket(sock);
 
@@ -36,8 +38,13 @@ export async function setupWhatsApp() {
         }
 
         if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+            const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
             console.log('Connection closed due to ', lastDisconnect?.error, ', reconnecting ', shouldReconnect);
+            if (statusCode === 405) {
+                console.log(chalk.red('Received 405 from WhatsApp. If this persists, update Baileys and re-pair by deleting credentials at:'));
+                console.log(chalk.red(AUTH_DIR));
+            }
             if (shouldReconnect) {
                 setupWhatsApp();
             }
