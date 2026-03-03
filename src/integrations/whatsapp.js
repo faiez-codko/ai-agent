@@ -9,8 +9,43 @@ import { IntegrationCommandHandler } from './commandHandler.js';
 import { setActiveSocket, sendWhatsAppMedia } from './whatsapp_client.js';
 import { loadConfig } from '../config.js';
 import { generateAudio } from '../tools/audio.js';
+import { saveChatHistory } from '../chatStorage.js';
 
 const AUTH_DIR = path.join(os.homedir(), '.auth_info_baileys');
+
+async function getOrCreateWhatsAppAgent({ manager, agentId, context }) {
+    let agent = manager.agents.get(agentId);
+    if (!agent) {
+        agent = await manager.createAgent('default', agentId);
+    }
+
+    const agentDir = path.join(process.cwd(), '.agent', agentId);
+    if (!fs.existsSync(agentDir)) {
+        fs.mkdirSync(agentDir, { recursive: true });
+    }
+
+    agent.memoryDir = path.join(agentDir, 'memory');
+    if (!fs.existsSync(agent.memoryDir)) {
+        fs.mkdirSync(agent.memoryDir, { recursive: true });
+    }
+
+    const systemMsg = agent.memory.find(m => m.role === 'system');
+    if (systemMsg && !systemMsg.content.includes('STRICT EXECUTION RULES')) {
+        systemMsg.content += `\n\n${context}`;
+    } else if (!systemMsg) {
+        agent.memory.unshift({ role: 'system', content: `You are ${agent.name}.\n\n${context}` });
+    }
+
+    return agent;
+}
+
+function pruneAgentMemory(agent, maxMessages = 120) {
+    if (!agent?.memory?.length) return;
+    if (agent.memory.length <= maxMessages) return;
+    const system = agent.memory[0]?.role === 'system' ? [agent.memory[0]] : [];
+    const tail = agent.memory.slice(system.length).slice(-(maxMessages - system.length));
+    agent.memory = system.concat(tail);
+}
 
 export async function setupWhatsApp() {
     console.log(chalk.blue('Setting up WhatsApp Integration...'));
@@ -210,47 +245,33 @@ MEDIA HANDLING:
         }
 
         const imageMessage = msg.message.imageMessage;
-        let text = msg.message.conversation || msg.message.extendedTextMessage?.text || imageMessage?.caption || "";
-        
-        let mediaPath = null;
-        if (imageMessage) {
-            try {
-                // Download image
-                const buffer = await downloadMediaMessage(
-                    msg,
-                    'buffer',
-                    { },
-                    { 
-                        logger: console,
-                        reuploadRequest: sock.updateMediaMessage
-                    }
-                );
-                
-                const ext = imageMessage.mimetype?.includes('png') ? 'png' : 'jpg';
-                const filename = `${msgId}.${ext}`;
-                mediaPath = path.join(MEDIA_DIR, filename);
-                fs.writeFileSync(mediaPath, buffer);
-                
-                // If no text, provide default prompt
-                if (!text) text = "Analyze this image.";
-                
-                console.log(chalk.gray(`Received image from ${remoteJid}, saved to ${mediaPath}`));
-            } catch (err) {
-                console.error("Failed to download media:", err);
-            }
-        }
+        const videoMessage = msg.message.videoMessage;
+        const audioMessage = msg.message.audioMessage;
+        const documentMessage = msg.message.documentMessage;
 
-        if (!text && !mediaPath) return;
+        let text = msg.message.conversation || msg.message.extendedTextMessage?.text || imageMessage?.caption || videoMessage?.caption || '';
+        if (!text && (imageMessage || videoMessage)) text = '';
+
+        if (!text && !(imageMessage || videoMessage || audioMessage || documentMessage)) return;
 
         // 1. Command Handler
         if (text.startsWith('/')) {
-             console.log(chalk.gray(`Command from ${remoteJid}: ${text}`));
-             const result = await commandHandler.handle(text);
-             if (result) {
-                 const sent = await sock.sendMessage(remoteJid, { text: result });
-                 if (sent?.key?.id) sentMsgIds.add(sent.key.id);
-                 return;
-             }
+            console.log(chalk.gray(`Command from ${remoteJid}: ${text}`));
+            try {
+                const safeJid = remoteJid.replace(/[^a-zA-Z0-9]/g, '_');
+                const agentId = `wa_${safeJid}`;
+                const agent = await getOrCreateWhatsAppAgent({ manager, agentId, context });
+                const result = await commandHandler.handle(text, { agent });
+                if (result) {
+                    const sent = await sock.sendMessage(remoteJid, { text: result });
+                    if (sent?.key?.id) sentMsgIds.add(sent.key.id);
+                    return;
+                }
+            } catch (e) {
+                const sent = await sock.sendMessage(remoteJid, { text: `Error: ${e.message}` });
+                if (sent?.key?.id) sentMsgIds.add(sent.key.id);
+                return;
+            }
         }
 
         // 2. Trigger Check: 
@@ -266,12 +287,54 @@ MEDIA HANDLING:
         }
 
         if (!isTriggered) {
-            // Cleanup media if not triggered
-            if (mediaPath && fs.existsSync(mediaPath)) fs.unlinkSync(mediaPath);
+            try {
+                const safeJid = remoteJid.replace(/[^a-zA-Z0-9]/g, '_');
+                const agentId = `wa_${safeJid}`;
+                const agent = await getOrCreateWhatsAppAgent({ manager, agentId, context });
+
+                const hasMedia = Boolean(imageMessage || videoMessage || audioMessage || documentMessage);
+                const mediaLabel = imageMessage ? '[image]' : videoMessage ? '[video]' : audioMessage ? '[audio]' : documentMessage ? '[document]' : '';
+                const content = `${mediaLabel}${text ? ` ${text}` : hasMedia ? ' (no caption)' : ''}`.trim();
+
+                agent.memory.push({
+                    role: 'user',
+                    content: `[WhatsApp context only — do not reply unless triggered] ${pushName ? `${pushName}: ` : ''}${content || '(empty message)'}`
+                });
+                pruneAgentMemory(agent);
+                agent.sessionId = await saveChatHistory(agent.id, agent.memory, agent, agent.sessionId);
+            } catch (e) {
+                console.error('Failed to save WhatsApp passive context:', e);
+            }
             return;
         }
 
         console.log(chalk.gray(`Triggered by ${isFromMe ? 'ME' : remoteJid}: ${text}`));
+
+        let mediaPath = null;
+        if (imageMessage) {
+            try {
+                const buffer = await downloadMediaMessage(
+                    msg,
+                    'buffer',
+                    {},
+                    {
+                        logger: console,
+                        reuploadRequest: sock.updateMediaMessage
+                    }
+                );
+
+                const ext = imageMessage.mimetype?.includes('png') ? 'png' : 'jpg';
+                const filename = `${msgId}.${ext}`;
+                mediaPath = path.join(MEDIA_DIR, filename);
+                fs.writeFileSync(mediaPath, buffer);
+
+                if (!text) text = 'Analyze this image.';
+
+                console.log(chalk.gray(`Received image from ${remoteJid}, saved to ${mediaPath}`));
+            } catch (err) {
+                console.error("Failed to download media:", err);
+            }
+        }
 
         // Clean the prompt (remove trigger if present)
         let prompt = text;
@@ -294,41 +357,9 @@ MEDIA HANDLING:
         await sock.sendPresenceUpdate('composing', remoteJid);
 
         try {
-            // Get or Create Agent for this specific user (JID)
-            // Sanitize JID for use as an ID (remove special chars)
             const safeJid = remoteJid.replace(/[^a-zA-Z0-9]/g, '_');
             const agentId = `wa_${safeJid}`;
-            
-            let agent = manager.agents.get(agentId);
-            
-            if (!agent) {
-                console.log(chalk.blue(`Creating new agent session for WhatsApp user: ${remoteJid}`));
-                agent = await manager.createAgent('default', agentId);
-                // We don't set this as the *global* active agent to avoid interfering with CLI
-            }
-
-            // Inject context if needed
-            const systemMsg = agent.memory.find(m => m.role === 'system');
-            
-            // Ensure agent directory exists for this user
-            const agentDir = path.join(process.cwd(), '.agent', agentId);
-            if (!fs.existsSync(agentDir)) {
-                 fs.mkdirSync(agentDir, { recursive: true });
-            }
-
-            // ISOLATED MEMORY: Assign a specific memory directory for this user
-            agent.memoryDir = path.join(agentDir, 'memory');
-            if (!fs.existsSync(agent.memoryDir)) {
-                fs.mkdirSync(agent.memoryDir, { recursive: true });
-            }
-
-            if (systemMsg && !systemMsg.content.includes('STRICT EXECUTION RULES')) {
-                systemMsg.content += `\n\n${context}`;
-            } else if (!systemMsg) {
-                 // Should not happen if agent.init() was called, but just in case
-                 agent.memory.unshift({ role: 'system', content: `You are ${agent.name}.\n\n${context}` });
-            }
-
+            const agent = await getOrCreateWhatsAppAgent({ manager, agentId, context });
             const response = await agent.chat(prompt);
             
             // Stop "typing..."
