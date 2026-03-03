@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 
 // Constants
-const MAX_CONTEXT_TOKENS = 120000; // Safe limit for GPT-4o (128k context)
+const MAX_CONTEXT_TOKENS = 120000;
 const SUMMARY_THRESHOLD = 40000; // Trigger summary early to prevent drift
 const MESSAGES_TO_KEEP = 15; // Keep last N messages raw
 const TOKEN_ESTIMATE_CHAR = 4; // 1 token ~= 4 chars
@@ -17,6 +17,55 @@ function estimateTokens(messages) {
         if (msg.tool_calls) text += JSON.stringify(msg.tool_calls);
     }
     return Math.ceil(text.length / TOKEN_ESTIMATE_CHAR);
+}
+
+function formatK(value) {
+    const k = (value / 1000).toFixed(1);
+    return `${k.endsWith('.0') ? k.slice(0, -2) : k}k`;
+}
+
+export function getContextUsage(memory) {
+    const usedTokens = estimateTokens(memory);
+    const percentUsed = Math.min(999, Math.round((usedTokens / MAX_CONTEXT_TOKENS) * 100));
+    return {
+        usedTokens,
+        limitTokens: MAX_CONTEXT_TOKENS,
+        percentUsed
+    };
+}
+
+export function formatContextUsageLine(memory) {
+    const usage = getContextUsage(memory);
+    return `used (${formatK(usage.usedTokens)} tokens/ ${formatK(usage.limitTokens)} tokens) ${usage.percentUsed}% used`;
+}
+
+function saveKeyPointsMemory(agent, checkpointId, summaryText, usageBefore) {
+    try {
+        const baseDir = agent?.memoryDir || path.join(process.cwd(), '.agent', 'memory');
+        const categoryDir = path.join(baseDir, 'general');
+        if (!fs.existsSync(categoryDir)) {
+            fs.mkdirSync(categoryDir, { recursive: true });
+        }
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const key = `context_reset_${stamp}`;
+        const filePath = path.join(categoryDir, `${key}.md`);
+        const fileContent = `---
+key: ${key}
+category: general
+updated_at: ${new Date().toISOString()}
+---
+
+# Context Reset Key Points
+- Checkpoint ID: ${checkpointId}
+- Context usage before reset: ~${usageBefore.usedTokens} / ${usageBefore.limitTokens} tokens (${usageBefore.percentUsed}%)
+
+## Summary
+${summaryText}
+`;
+        fs.writeFileSync(filePath, fileContent);
+    } catch (e) {
+        console.error('Failed to save context reset key points:', e.message);
+    }
 }
 
 /**
@@ -94,10 +143,12 @@ function loadTaskState(agentId) {
     return null;
 }
 
-export async function summarizeMemory(agent) {
-    const totalTokens = estimateTokens(agent.memory);
+export async function summarizeMemory(agent, options = {}) {
+    const { force = false, fullCheckpoint = false } = options;
+    const usageBefore = getContextUsage(agent.memory);
+    const totalTokens = usageBefore.usedTokens;
 
-    if (totalTokens < SUMMARY_THRESHOLD) {
+    if (!force && totalTokens < SUMMARY_THRESHOLD) {
         return false;
     }
 
@@ -127,10 +178,11 @@ export async function summarizeMemory(agent) {
     }
 
     const messagesToSummarize = agent.memory.slice(startIndex, endIndex);
-    const messagesToKeep = agent.memory.slice(endIndex);
+    const messagesToKeep = force ? [] : agent.memory.slice(endIndex);
 
     // 2. Create Checkpoint (replaces old archive)
-    const checkpointId = createCheckpoint(messagesToSummarize, "Pending Summary");
+    const checkpointPayload = fullCheckpoint ? agent.memory : messagesToSummarize;
+    const checkpointId = createCheckpoint(checkpointPayload, fullCheckpoint ? "Full Context Reset Checkpoint" : "Pending Summary");
     console.log(chalk.blue(`📌 Created checkpoint ${checkpointId}`));
 
     // 3. Generate Summary — with STRONG emphasis on preserving the task goal
@@ -184,6 +236,7 @@ ${messagesToSummarize.map(m => `${m.role}: ${JSON.stringify(m.content || m.tool_
 
         // Save the compacted memory
         await saveChatHistory(agent.id, agent.memory, agent);
+        saveKeyPointsMemory(agent, checkpointId, summaryResponse, usageBefore);
 
         console.log(chalk.green(`✅ Memory summarized. Reduced from ${messagesToSummarize.length + messagesToKeep.length} to ${newMemory.length} messages.`));
         return true;
@@ -194,4 +247,4 @@ ${messagesToSummarize.map(m => `${m.role}: ${JSON.stringify(m.content || m.tool_
     }
 }
 
-export { saveTaskState, loadTaskState };
+export { MAX_CONTEXT_TOKENS, saveTaskState, loadTaskState, estimateTokens };

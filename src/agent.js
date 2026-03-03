@@ -4,7 +4,7 @@ import { runCommand } from './tools/shell.js';
 import { tools as toolImplementations, toolDefinitions } from './tools/index.js';
 import { loadPersona } from './personas/index.js';
 import { loadChatHistory, saveChatHistory, logToolExecution, createSession } from './chatStorage.js';
-import { summarizeMemory, saveTaskState } from './memory/summary.js';
+import { summarizeMemory, saveTaskState, getContextUsage, formatContextUsageLine, MAX_CONTEXT_TOKENS } from './memory/summary.js';
 import { loadWorkspaceContext } from './memory/workspace.js';
 import { sendMessage as sendTelegramMessage } from './tools/telegram.js';
 import chalk from 'chalk';
@@ -178,6 +178,7 @@ ${workspaceKnowledge || '(No workspace knowledge loaded)'}
 
         // Check and summarize memory if needed
         await summarizeMemory(this);
+        await this._enforceHardContextReset(onUpdate);
 
         let loopCount = 0;
         const MAX_LOOPS = 60;
@@ -188,6 +189,7 @@ ${workspaceKnowledge || '(No workspace knowledge loaded)'}
 
         while (loopCount < MAX_LOOPS) {
             loopCount++;
+            await this._enforceHardContextReset(onUpdate);
             const messagesForModel = this._buildContext();
 
             const response = await this.provider.chat(messagesForModel, this.toolsDefinition, onUpdate);
@@ -263,9 +265,12 @@ ${workspaceKnowledge || '(No workspace knowledge loaded)'}
 
             // If no tool calls, we are done
             if (!response.toolCalls || response.toolCalls.length === 0) {
+                const usageLine = formatContextUsageLine(this.memory);
                 await saveChatHistory(this.id, this.memory, this, this.sessionId);
+                if (onUpdate) onUpdate({ type: 'context_usage', content: usageLine });
                 if (onUpdate) onUpdate({ type: 'done' });
-                return finalResponse || response.content;
+                const baseResponse = finalResponse || response.content || '';
+                return `${baseResponse}\n\n${usageLine}`;
             }
 
             // If we have tool calls, execute them
@@ -359,7 +364,25 @@ Tool calls so far: ${this._toolCallCount}. Stay focused. What is the NEXT step?`
         }
 
         if (onUpdate) onUpdate({ type: 'done' });
-        return finalResponse;
+        const usageLine = formatContextUsageLine(this.memory);
+        if (onUpdate) onUpdate({ type: 'context_usage', content: usageLine });
+        return `${finalResponse || ''}\n\n${usageLine}`;
+    }
+
+    async _enforceHardContextReset(onUpdate = null) {
+        const usage = getContextUsage(this.memory);
+        if (usage.usedTokens < MAX_CONTEXT_TOKENS) return false;
+
+        console.log(chalk.red(`⚠️  Context limit reached (${usage.usedTokens}/${MAX_CONTEXT_TOKENS}). Resetting with summary checkpoint...`));
+        if (onUpdate) {
+            onUpdate({
+                type: 'thinking',
+                message: `Context limit reached (${usage.percentUsed}%). Summarizing and resetting context...`
+            });
+        }
+
+        await summarizeMemory(this, { force: true, fullCheckpoint: true });
+        return true;
     }
 
     _buildContext(maxMessages = 40) {

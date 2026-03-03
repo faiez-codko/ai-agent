@@ -197,6 +197,15 @@
             color: var(--text-color);
             padding-left: 0;
         }
+
+        .context-usage {
+            color: var(--secondary-text);
+            font-style: italic;
+            font-size: 12px;
+            line-height: 1.4;
+            margin-top: -12px;
+            margin-bottom: 4px;
+        }
         
         .message-content pre {
             background: var(--code-bg);
@@ -1090,6 +1099,9 @@
                                     scrollToBottom();
                                 } else if (data.type === 'done') {
                                     removeThinking(thinkingId);
+                                } else if (data.type === 'context_usage') {
+                                    appendContextUsage(data.content);
+                                    scrollToBottom();
                                 } else if (data.type === 'error') {
                                     removeThinking(thinkingId);
                                     appendMessage('assistant', 'Error: ' + data.error);
@@ -1221,6 +1233,17 @@
                 contentDiv.appendChild(textSpan);
             }
             
+            chatContainer.appendChild(msgDiv);
+        }
+
+        function appendContextUsage(content) {
+            if (!content) return;
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message assistant';
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content context-usage';
+            contentDiv.textContent = content;
+            msgDiv.appendChild(contentDiv);
             chatContainer.appendChild(msgDiv);
         }
 

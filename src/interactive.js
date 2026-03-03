@@ -74,7 +74,22 @@ export async function startInteractiveMode() {
           return confirm;
         });
         spinner.stop();
-        console.log(chalk.green('AI: ') + response);
+        const responseText = String(response || '');
+        const lines = responseText.split('\n');
+        const lastLine = lines[lines.length - 1].trim();
+        const usageMatch = /^used \(.+\) \d+% used$/i.test(lastLine);
+
+        if (usageMatch) {
+          const main = lines.slice(0, -1).join('\n').trim();
+          if (main) {
+            console.log(chalk.green('AI: ') + main);
+          } else {
+            console.log(chalk.green('AI:'));
+          }
+          console.log(chalk.italic.gray(lastLine));
+        } else {
+          console.log(chalk.green('AI: ') + responseText);
+        }
 
         // Audio Generation
         try {
