@@ -103,14 +103,29 @@ export async function sendWhatsAppMedia(jid, mediaPath, caption = '', mediaType 
         jid = jid + '@s.whatsapp.net';
     }
 
-    // Determine media type if 'auto'
-    if (mediaType === 'auto') {
-        const ext = path.extname(mediaPath).toLowerCase();
-        if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) mediaType = 'image';
-        else if (['.mp4', '.mov', '.avi'].includes(ext)) mediaType = 'video';
-        else if (['.mp3', '.wav', '.ogg'].includes(ext)) mediaType = 'audio';
-        else mediaType = 'document';
-    }
+    // Determine media type + mimetype
+    const ext = path.extname(mediaPath).toLowerCase();
+    const inferTypeFromExt = (e) => {
+        if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(e)) return 'image';
+        if (['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(e)) return 'video';
+        if (['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.opus'].includes(e)) return 'audio';
+        return 'document';
+    };
+    const inferMime = (e) => {
+        const map = {
+            '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp',
+            '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska', '.webm': 'video/webm',
+            '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.opus': 'audio/ogg; codecs=opus',
+            '.pdf': 'application/pdf', '.txt': 'text/plain', '.csv': 'text/csv',
+            '.zip': 'application/zip', '.json': 'application/json',
+            '.doc': 'application/msword', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.xls': 'application/vnd.ms-excel', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            '.ppt': 'application/vnd.ms-powerpoint', '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        };
+        return map[e] || 'application/octet-stream';
+    };
+    if (mediaType === 'auto') mediaType = inferTypeFromExt(ext);
+    const mimetype = inferMime(ext);
 
     const payload = {};
     
@@ -121,22 +136,22 @@ export async function sendWhatsAppMedia(jid, mediaPath, caption = '', mediaType 
         if (!fs.existsSync(mediaPath)) {
             throw new Error(`File not found: ${mediaPath}`);
         }
-        // For local files, we can use the path in 'url' for Baileys, or buffer.
-        // Using buffer is often safer for local files to ensure permissions/readability.
+        // For local files we pass Buffer
         const buffer = fs.readFileSync(mediaPath);
         payload[mediaType] = buffer;
     }
 
-    if (caption) payload.caption = caption;
+    // Common fields
+    if (caption && (mediaType === 'image' || mediaType === 'video')) payload.caption = caption;
+    // Mimetype is especially important for audio/document
+    payload.mimetype = mimetype;
     
-    // For documents, try to add mimetype and filename
     if (mediaType === 'document') {
         payload.fileName = path.basename(mediaPath);
-        // We could add mimetype here if we had a library, but Baileys often infers or generic is fine.
     }
-    // For audio, we might want ptt (push to talk)
     if (mediaType === 'audio') {
-        payload.ptt = false; // Send as audio file, not voice note by default
+        // Send as standard audio file (not PTT voice note) by default
+        payload.ptt = false;
     }
 
     await sock.sendMessage(jid, payload);
