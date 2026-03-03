@@ -190,7 +190,7 @@ ${workspaceKnowledge || '(No workspace knowledge loaded)'}
             loopCount++;
             const messagesForModel = this._buildContext();
 
-            const response = await this._safeChat(messagesForModel, this.toolsDefinition, onUpdate);
+            const response = await this.provider.chat(messagesForModel, this.toolsDefinition, onUpdate);
             try {
                 sendTelegramMessage(`Agent ${this.id} response: ${response.content} \nTool Calls: ${JSON.stringify(response.toolCalls || [])}`);
             } catch { }
@@ -298,35 +298,9 @@ ${workspaceKnowledge || '(No workspace knowledge loaded)'}
                 // Add result to memory
                 let memoryContent = typeof result === 'string' ? result : JSON.stringify(result);
 
-                // Tools whose output the AI typically needs in full (web scraping, audits, queries)
-                const CONTEXT_CRITICAL_TOOLS = new Set([
-                    'browser_visit', 'browser_eval', 'browser_fetch', 'browser_screenshot',
-                    'db_query', 'db_schema', 'analyze_image', 'desktop_screenshot'
-                ]);
-
-                // CONTEXT OPTIMIZATION: Offload large tool outputs to SQLite DB
-                // BUT: context-critical tools keep a much larger preview
-                const isCritical = CONTEXT_CRITICAL_TOOLS.has(toolName);
-                const MAX_OUTPUT_LENGTH = isCritical ? 8000 : 2000;
-
                 // Always log full output to DB if session exists
-                let executionId = null;
                 if (this.sessionId) {
-                    executionId = await logToolExecution(this.sessionId, toolName, args, memoryContent);
-                }
-
-                if (memoryContent.length > MAX_OUTPUT_LENGTH) {
-                    const previewLen = isCritical ? 4000 : 400;
-                    const preview = memoryContent.substring(0, previewLen);
-                    
-                    const dbInfo = executionId ? `(DB ID: ${executionId})` : '(DB logging failed)';
-                    const readCmd = executionId 
-                        ? `read_tool_output({ id: ${executionId} })` 
-                        : `(Consult admin: Tool output too large and DB log failed)`;
-
-                    memoryContent = `[SYSTEM: Full output stored in SQLite ${dbInfo} — Length: ${memoryContent.length} chars.\nTo read the full output, call: ${readCmd}\n\nPreview:\n${preview}...]`;
-
-                    console.log(chalk.yellow(`⚠️  Tool output offloaded to DB ${executionId} (${memoryContent.length} chars)`));
+                    await logToolExecution(this.sessionId, toolName, args, memoryContent);
                 }
 
                 this.memory.push({
@@ -388,44 +362,7 @@ Tool calls so far: ${this._toolCallCount}. Stay focused. What is the NEXT step?`
         return finalResponse;
     }
 
-    async _safeChat(messages, tools, onUpdate = null) {
-        try {
-            return await this.provider.chat(messages, tools, onUpdate);
-        } catch (e) {
-            const message = e && e.message ? String(e.message) : String(e);
-            // Catch various context length errors from different providers
-            if (message.includes('Input tokens exceed') ||
-                message.includes('context_length_exceeded') ||
-                message.includes('maximum context length')) {
-
-                console.log(chalk.yellow('⚠️  Token limit exceeded. Retrying with smaller context...'));
-
-                // Fallback 1: Limit to 20 messages
-                try {
-                    const smaller = this._buildContext(20);
-                    return await this.provider.chat(smaller, tools, onUpdate);
-                } catch (e2) {
-                    // Fallback 2: Limit to 10 messages AND truncate large outputs
-                    console.log(chalk.yellow('⚠️  Still too large. Retrying with minimal context and truncation...'));
-                    try {
-                        const tiny = this._buildContext(10, true);
-                        return await this.provider.chat(tiny, tools, onUpdate);
-                    } catch (e3) {
-                        // Fallback 3: Last resort - just system prompt and last user message
-                        console.log(chalk.red('⚠️  Critical token overflow. Retrying with single message...'));
-                        const lastResort = this._buildContext(1, true);
-                        return await this.provider.chat(lastResort, tools, onUpdate);
-                    }
-                }
-            }
-            try {
-                await sendTelegramMessage(`Agent ${this.id} provider.chat error: ${message}`);
-            } catch { }
-            throw e;
-        }
-    }
-
-    _buildContext(maxMessages = 40, truncateLargeOutputs = false) {
+    _buildContext(maxMessages = 40) {
         const systemMessages = this.memory.filter(m => m.role === 'system');
         const nonSystem = this.memory.filter(m => m.role !== 'system');
         let recent = nonSystem.slice(-maxMessages);
@@ -468,45 +405,7 @@ Tool calls so far: ${this._toolCallCount}. Stay focused. What is the NEXT step?`
             }
         }
 
-        // 3. STALE TOOL OUTPUT COMPRESSION
-        // Tool outputs older than `staleThreshold` messages get compressed to save context.
-        // EXCEPTION: Context-critical tools (browser, db_query, etc.) are NEVER compressed
-        // because tasks like web audits and scraping need the full HTML/data.
-        const staleThreshold = 15; // Messages from the end to keep in full
-        const NEVER_COMPRESS_TOOLS = new Set([
-            'browser_visit', 'browser_eval', 'browser_fetch', 'browser_screenshot',
-            'db_query', 'db_schema', 'analyze_image', 'desktop_screenshot'
-        ]);
-        const compressedRecent = sanitizedRecent.map((msg, idx) => {
-            const distFromEnd = sanitizedRecent.length - 1 - idx;
-            const toolName = msg.name || 'unknown_tool';
-            // Skip compression for context-critical tools
-            if (msg.role === 'tool' && distFromEnd > staleThreshold && msg.content && msg.content.length > 200 && !NEVER_COMPRESS_TOOLS.has(toolName)) {
-                // Compress stale tool outputs to a short summary
-                const preview = msg.content.substring(0, 150).replace(/\n/g, ' ');
-                return {
-                    ...msg,
-                    content: `[Stale output from ${toolName} — compressed] ${preview}... (${msg.content.length} chars, use read_file if needed)`
-                };
-            }
-            return msg;
-        });
-
-        let context = [...systemMessages, ...compressedRecent];
-
-        if (truncateLargeOutputs) {
-            context = context.map(msg => {
-                if ((msg.role === 'tool' || msg.role === 'assistant') && msg.content && msg.content.length > 800) {
-                    return {
-                        ...msg,
-                        content: msg.content.substring(0, 800) + '... [Content truncated due to size limit]'
-                    };
-                }
-                return msg;
-            });
-        }
-
-        return context;
+        return [...systemMessages, ...sanitizedRecent];
     }
 
     async _maybeSummarizeHistory() {
@@ -566,9 +465,7 @@ Tool calls so far: ${this._toolCallCount}. Stay focused. What is the NEXT step?`
         const files = await listFiles(`${dirPath}/**/*`);
         let summary = `Directory listing for ${dirPath}:\n`;
 
-        // Limit to prevent token overflow. 
-        // Strategy: List all files, but only read content of first 10 text files or specific types.
-        // For now, let's just list them and read the first few relevant files.
+        // Strategy: List all files, then read only a small set of relevant text files.
 
         summary += files.join('\n');
         summary += '\n\nSelected File Contents:\n';
