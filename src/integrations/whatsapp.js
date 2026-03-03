@@ -47,6 +47,34 @@ function pruneAgentMemory(agent, maxMessages = 120) {
     agent.memory = system.concat(tail);
 }
 
+function getQuotedContext(msg) {
+    const ctx =
+        msg.message?.extendedTextMessage?.contextInfo ||
+        msg.message?.imageMessage?.contextInfo ||
+        msg.message?.videoMessage?.contextInfo ||
+        msg.message?.documentMessage?.contextInfo ||
+        msg.message?.audioMessage?.contextInfo ||
+        null;
+    const q = ctx?.quotedMessage;
+    if (!q) return null;
+    const qt =
+        q.conversation ||
+        q.extendedTextMessage?.text ||
+        q.imageMessage?.caption ||
+        q.videoMessage?.caption ||
+        q.documentMessage?.fileName ||
+        '';
+    const label =
+        q.imageMessage ? '[image]' :
+        q.videoMessage ? '[video]' :
+        q.audioMessage ? '[audio]' :
+        q.documentMessage ? '[document]' :
+        '';
+    const text = `${label}${qt ? ` ${qt}` : label ? '' : ''}`.trim();
+    const sender = ctx.participant || '';
+    return { text, sender };
+}
+
 export async function setupWhatsApp() {
     console.log(chalk.blue('Setting up WhatsApp Integration...'));
     
@@ -294,7 +322,9 @@ MEDIA HANDLING:
 
                 const hasMedia = Boolean(imageMessage || videoMessage || audioMessage || documentMessage);
                 const mediaLabel = imageMessage ? '[image]' : videoMessage ? '[video]' : audioMessage ? '[audio]' : documentMessage ? '[document]' : '';
-                const content = `${mediaLabel}${text ? ` ${text}` : hasMedia ? ' (no caption)' : ''}`.trim();
+                const quoted = getQuotedContext(msg);
+                const quotedPart = quoted?.text ? ` | reply-to: ${quoted.text}` : '';
+                const content = `${mediaLabel}${text ? ` ${text}` : hasMedia ? ' (no caption)' : ''}${quotedPart}`.trim();
 
                 agent.memory.push({
                     role: 'user',
@@ -344,6 +374,11 @@ MEDIA HANDLING:
         }
 
         if (!prompt && !mediaPath) return; // Ignore empty prompts after removing tag
+
+        const quoted = getQuotedContext(msg);
+        if (quoted?.text) {
+            prompt = `[Quoted Reply: ${quoted.text}]` + (prompt ? `\n${prompt}` : '');
+        }
 
         // Attach image info to prompt if present
         if (mediaPath) {
