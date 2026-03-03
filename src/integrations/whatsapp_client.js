@@ -1,34 +1,104 @@
-import makeWASocket from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 let activeSocket = null;
+let isConnected = false;
+let connectPromise = null;
 
 export function setActiveSocket(sock) {
     activeSocket = sock;
+    isConnected = Boolean(sock?.ws && sock.ws.readyState === 1);
+    try {
+        sock?.ev?.on?.('connection.update', (update) => {
+            if (update.connection === 'open') isConnected = true;
+            if (update.connection === 'close') isConnected = false;
+        });
+    } catch {}
 }
 
 export function getActiveSocket() {
     return activeSocket;
 }
 
-export async function sendWhatsAppMessage(jid, text) {
-    if (!activeSocket) {
-        throw new Error('WhatsApp is not connected or not authenticated.');
+async function ensureWhatsAppConnected() {
+    if (activeSocket && isConnected) return activeSocket;
+    if (connectPromise) return await connectPromise;
+
+    connectPromise = (async () => {
+        const authDir = path.join(os.homedir(), '.auth_info_baileys');
+        if (!fs.existsSync(authDir)) {
+            fs.mkdirSync(authDir, { recursive: true });
+        }
+
+        const { state, saveCreds } = await useMultiFileAuthState(authDir);
+        const { version } = await fetchLatestBaileysVersion();
+
+        const sock = makeWASocket({
+            auth: state,
+            version,
+            browser: ["Windows", "Chrome", "128.0.0"]
+        });
+
+        setActiveSocket(sock);
+        sock.ev.on('creds.update', saveCreds);
+
+        await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                cleanup();
+                reject(new Error('WhatsApp connection timed out. Ensure integration is running and authenticated.'));
+            }, 15000);
+
+            const onUpdate = (update) => {
+                if (update.qr) {
+                    cleanup();
+                    reject(new Error('WhatsApp is not authenticated. Run "ai-agent integration setup whatsapp" and scan the QR code.'));
+                    return;
+                }
+                if (update.connection === 'open') {
+                    cleanup();
+                    resolve();
+                    return;
+                }
+                if (update.connection === 'close') {
+                    cleanup();
+                    reject(new Error((update.lastDisconnect?.error)?.message || 'WhatsApp connection closed.'));
+                }
+            };
+
+            const cleanup = () => {
+                clearTimeout(timeout);
+                sock.ev.off?.('connection.update', onUpdate);
+                sock.ev.removeListener?.('connection.update', onUpdate);
+            };
+
+            sock.ev.on('connection.update', onUpdate);
+        });
+
+        return sock;
+    })();
+
+    try {
+        return await connectPromise;
+    } finally {
+        connectPromise = null;
     }
+}
+
+export async function sendWhatsAppMessage(jid, text) {
+    const sock = await ensureWhatsAppConnected();
     // Simple validation for JID (if it's just a number, append suffix)
     if (!jid.includes('@')) {
         jid = jid + '@s.whatsapp.net';
     }
     
-    await activeSocket.sendMessage(jid, { text });
+    await sock.sendMessage(jid, { text });
     return `Message sent to ${jid}`;
 }
 
 export async function sendWhatsAppMedia(jid, mediaPath, caption = '', mediaType = 'auto') {
-    if (!activeSocket) {
-        throw new Error('WhatsApp is not connected or not authenticated.');
-    }
+    const sock = await ensureWhatsAppConnected();
     if (!jid.includes('@')) {
         jid = jid + '@s.whatsapp.net';
     }
@@ -69,6 +139,6 @@ export async function sendWhatsAppMedia(jid, mediaPath, caption = '', mediaType 
         payload.ptt = false; // Send as audio file, not voice note by default
     }
 
-    await activeSocket.sendMessage(jid, payload);
+    await sock.sendMessage(jid, payload);
     return `Media (${mediaType}) sent to ${jid}`;
 }
