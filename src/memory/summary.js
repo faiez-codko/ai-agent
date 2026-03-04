@@ -6,7 +6,7 @@ import path from 'path';
 
 // Constants
 const MAX_CONTEXT_TOKENS = 120000;
-const SUMMARY_THRESHOLD = 40000; // Trigger summary early to prevent drift
+const SUMMARY_THRESHOLD = 80000; // Trigger summary early to prevent drift
 const MESSAGES_TO_KEEP = 15; // Keep last N messages raw
 const TOKEN_ESTIMATE_CHAR = 4; // 1 token ~= 4 chars
 
