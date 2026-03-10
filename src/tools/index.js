@@ -23,6 +23,21 @@ const resolvePath = (filePath, cwd) => {
   if (path.isAbsolute(filePath)) return filePath;
   return path.resolve(cwd || process.cwd(), filePath);
 };
+const insideSandbox = (fullPath, sandboxDir) => {
+  if (!sandboxDir) return true;
+  const normalizedSandbox = path.resolve(sandboxDir);
+  const normalizedTarget = path.resolve(fullPath);
+  return normalizedTarget.startsWith(normalizedSandbox + path.sep) || normalizedTarget === normalizedSandbox;
+};
+const coerceToSandboxPath = (filePath, agent) => {
+  const fullPath = resolvePath(filePath, agent?.cwd);
+  const sandbox = agent?.sandboxDir;
+  if (!sandbox) return fullPath;
+  if (insideSandbox(fullPath, sandbox)) return fullPath;
+  const stripped = fullPath.replace(/^[A-Za-z]:[\\/]/, '').replace(/^[\\/]+/, '');
+  const safe = stripped.split(/[\\/]/).filter(Boolean).map(s => (s === '..' ? '_' : s)).join(path.sep);
+  return path.join(sandbox, safe);
+};
 export const toolDefinitions = [
   {
     name: "read_file",
@@ -376,7 +391,10 @@ export const tools = {
     return typeof result === 'string' ? result : JSON.stringify(result);
   },
   read_file: async ({ path: filePath }, { agent }) => {
-    const fullPath = resolvePath(filePath, agent?.cwd);
+    const fullPath = coerceToSandboxPath(filePath, agent);
+    if (agent?.sandboxDir && !insideSandbox(fullPath, agent.sandboxDir)) {
+      return "Access denied.";
+    }
 
     // Check file extension for images/binary
     const ext = path.extname(fullPath).toLowerCase();
@@ -403,7 +421,10 @@ export const tools = {
     return await readFile(fullPath);
   },
   write_file: async ({ path: filePath, content }, { agent, confirmCallback }) => {
-    const fullPath = resolvePath(filePath, agent?.cwd);
+    const fullPath = coerceToSandboxPath(filePath, agent);
+    if (agent?.sandboxDir && !insideSandbox(fullPath, agent.sandboxDir)) {
+      return "Access denied.";
+    }
 
     if (agent?.safeMode) {
       if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
@@ -415,7 +436,10 @@ export const tools = {
     return `Successfully wrote to ${fullPath}`;
   },
   update_file: async ({ path: filePath, search_text, replace_text }, { agent, confirmCallback }) => {
-    const fullPath = resolvePath(filePath, agent?.cwd);
+    const fullPath = coerceToSandboxPath(filePath, agent);
+    if (agent?.sandboxDir && !insideSandbox(fullPath, agent.sandboxDir)) {
+      return "Access denied.";
+    }
 
     if (agent?.safeMode) {
       if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
@@ -437,7 +461,10 @@ export const tools = {
     }
   },
   delete_file: async ({ path: filePath }, { confirmCallback, agent }) => {
-    const fullPath = resolvePath(filePath, agent?.cwd);
+    const fullPath = coerceToSandboxPath(filePath, agent);
+    if (agent?.sandboxDir && !insideSandbox(fullPath, agent.sandboxDir)) {
+      return "Access denied.";
+    }
     // Check if file exists first
     try {
       await fs.access(fullPath);
@@ -457,7 +484,7 @@ export const tools = {
     return `Successfully deleted ${fullPath}`;
   },
   run_command: async ({ command }, { agent, confirmCallback }) => {
-    const cwd = agent?.cwd || process.cwd();
+    const cwd = agent?.sandboxDir || agent?.cwd || process.cwd();
 
     if (agent?.safeMode) {
       if (!confirmCallback) return "Error: Safe Mode enabled but no confirmation callback provided.";
@@ -479,12 +506,18 @@ export const tools = {
     return stdout || stderr || "Command executed with no output.";
   },
   list_files: async ({ path: dirPath = '.', ignore = ['node_modules/**', '.git/**'] }, { agent }) => {
-    const fullPath = resolvePath(dirPath, agent?.cwd);
+    const fullPath = coerceToSandboxPath(dirPath, agent);
+    if (agent?.sandboxDir && !insideSandbox(fullPath, agent.sandboxDir)) {
+      return "Access denied.";
+    }
     const files = await listFiles(`${fullPath}/**/*`, ignore);
     return files.join('\n');
   },
   read_dir: async ({ path: dirPath = '.' }, { agent }) => {
-    const fullPath = resolvePath(dirPath, agent?.cwd);
+    const fullPath = coerceToSandboxPath(dirPath, agent);
+    if (agent?.sandboxDir && !insideSandbox(fullPath, agent.sandboxDir)) {
+      return "Access denied.";
+    }
     try {
       const files = await fs.readdir(fullPath);
       return `Contents of ${fullPath}:\n${files.join('\n')}`;
@@ -493,7 +526,10 @@ export const tools = {
     }
   },
   change_directory: async ({ path: dirPath }, { agent }) => {
-    const fullPath = resolvePath(dirPath, agent?.cwd);
+    const fullPath = coerceToSandboxPath(dirPath, agent);
+    if (agent?.sandboxDir && !insideSandbox(fullPath, agent.sandboxDir)) {
+      return "Access denied.";
+    }
     try {
       const stats = await fs.stat(fullPath);
       if (!stats.isDirectory()) {

@@ -28,6 +28,14 @@ async function getOrCreateWhatsAppAgent({ manager, agentId, context }) {
     if (!fs.existsSync(agent.memoryDir)) {
         fs.mkdirSync(agent.memoryDir, { recursive: true });
     }
+    // Auto-sandbox for WhatsApp agents
+    const sandboxDir = path.join(agentDir, 'sandbox');
+    if (!fs.existsSync(sandboxDir)) {
+        fs.mkdirSync(sandboxDir, { recursive: true });
+    }
+    agent.cwd = sandboxDir;
+    agent.sandboxDir = sandboxDir;
+    agent.safeMode = true;
 
     const systemMsg = agent.memory.find(m => m.role === 'system');
     if (systemMsg && !systemMsg.content.includes('STRICT EXECUTION RULES')) {
@@ -306,12 +314,27 @@ MEDIA HANDLING:
         // - Trigger if explicitly mentioned (customTrigger) or if trigger is 'none'
         // - Trigger if it's a "Self Chat" (Note to Self)
         const isSelfChat = remoteJid === meId;
+        const quoted = getQuotedContext(msg);
+        const isReplyToMe = quoted?.sender ? jidNormalizedUser(quoted.sender) === meId : false;
+        const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const triggerRegex = customTrigger && customTrigger !== 'none'
+            ? new RegExp(`(^|\\s)${escapeRegex(customTrigger)}(\\b|\\s|[,.!?])`, 'i')
+            : null;
+        const hasExplicitTrigger = triggerRegex ? triggerRegex.test(text) : false;
+        const looksLikeTemplate = /\{\{[^}]*\}\}/.test(text);
+        const looksLikeJustNumbers = /^\s*\d+(?:\s+\d+)*\s*$/.test(text);
         let isTriggered = false;
 
         if (customTrigger === 'none') {
-            isTriggered = true;
+            // Even when trigger is 'none', avoid accidental triggers on templates/numbers unless replying to the bot or self chat
+            isTriggered = (isReplyToMe || isSelfChat) && !(looksLikeTemplate || looksLikeJustNumbers);
         } else {
-            isTriggered = text.toLowerCase().includes(customTrigger.toLowerCase()) || isSelfChat;
+            // Require explicit trigger mention OR replying to the bot OR self chat
+            isTriggered = hasExplicitTrigger || isReplyToMe || isSelfChat;
+            // Guard against accidental triggers on numbers/templates without explicit trigger
+            if (!hasExplicitTrigger && (looksLikeTemplate || looksLikeJustNumbers) && !isReplyToMe && !isSelfChat) {
+                isTriggered = false;
+            }
         }
 
         if (!isTriggered) {
@@ -322,7 +345,6 @@ MEDIA HANDLING:
 
                 const hasMedia = Boolean(imageMessage || videoMessage || audioMessage || documentMessage);
                 const mediaLabel = imageMessage ? '[image]' : videoMessage ? '[video]' : audioMessage ? '[audio]' : documentMessage ? '[document]' : '';
-                const quoted = getQuotedContext(msg);
                 const quotedPart = quoted?.text ? ` | reply-to: ${quoted.text}` : '';
                 const content = `${mediaLabel}${text ? ` ${text}` : hasMedia ? ' (no caption)' : ''}${quotedPart}`.trim();
 
@@ -375,7 +397,6 @@ MEDIA HANDLING:
 
         if (!prompt && !mediaPath) return; // Ignore empty prompts after removing tag
 
-        const quoted = getQuotedContext(msg);
         if (quoted?.text) {
             prompt = `[Quoted Reply: ${quoted.text}]` + (prompt ? `\n${prompt}` : '');
         }
