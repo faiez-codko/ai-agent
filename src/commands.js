@@ -19,6 +19,8 @@ import path from 'path';
 import fsp from 'fs/promises';
 import os from 'os';
 import { SheetsService } from './tools/sheets.js';
+import { sendWhatsAppMessage, sendWhatsAppMedia } from './integrations/whatsapp_client.js';
+import { emailTools } from './tools/email.js';
 
 export async function setupSheets(options) {
     try {
@@ -851,6 +853,72 @@ export async function call(target, options) {
     } else {
       console.log(JSON.stringify(result, null, 2));
     }
+  } catch (error) {
+    console.error(chalk.red(error.message));
+    process.exit(1);
+  }
+}
+
+export async function whatsapp(options) {
+  const to = options?.to;
+  const message = options?.message;
+  const media = options?.media;
+  const caption = options?.caption;
+  const mediaType = options?.type || 'auto';
+
+  if (!to) {
+    console.error(chalk.red('Error: --to <number> is required.'));
+    process.exit(1);
+  }
+
+  if (!message && !media) {
+    console.error(chalk.red('Error: Provide --message and/or --media.'));
+    process.exit(1);
+  }
+
+  try {
+    if (media) {
+      const mediaPath = path.isAbsolute(media) ? media : path.resolve(process.cwd(), media);
+      const finalCaption = caption ?? message ?? '';
+      const result = await sendWhatsAppMedia(to, mediaPath, finalCaption, mediaType);
+      console.log(result);
+      return;
+    }
+
+    const result = await sendWhatsAppMessage(to, message);
+    console.log(result);
+  } catch (error) {
+    console.error(chalk.red(error.message));
+    process.exit(1);
+  }
+}
+
+export async function email(options) {
+  const to = options?.to;
+  const subject = options?.subject;
+  const body = options?.body;
+  const attachmentsRaw = options?.attach;
+
+  if (!to) {
+    console.error(chalk.red('Error: --to <email> is required.'));
+    process.exit(1);
+  }
+  if (!subject) {
+    console.error(chalk.red('Error: --subject <subject> is required.'));
+    process.exit(1);
+  }
+  if (!body) {
+    console.error(chalk.red('Error: --body <text> is required.'));
+    process.exit(1);
+  }
+
+  const attachments = Array.isArray(attachmentsRaw)
+    ? attachmentsRaw.map(p => (path.isAbsolute(p) ? p : path.resolve(process.cwd(), p)))
+    : [];
+
+  try {
+    const result = await emailTools.send_email({ to, subject, body, attachments });
+    console.log(result);
   } catch (error) {
     console.error(chalk.red(error.message));
     process.exit(1);

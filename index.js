@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import { Command } from 'commander';
-import { setup, setupSheets, read, update, fix, run, web, integrationList, integrationSetup, mcpList, mcpInstall, mcpEnable, mcpDisable, mcpRemove, call, skillsAdd, skillsList, sessionsList, sessionsExport } from './src/commands.js';
+import { setup, setupSheets, read, update, fix, run, web, integrationList, integrationSetup, mcpList, mcpInstall, mcpEnable, mcpDisable, mcpRemove, call, skillsAdd, skillsList, sessionsList, sessionsExport, whatsapp, email } from './src/commands.js';
 import { startInteractiveMode } from './src/interactive.js';
 import chalk from 'chalk';
 import path from 'path';
@@ -24,7 +24,7 @@ if (process.argv.length <= 2) {
   });
 } else {
   program
-    .name('agent')
+    .name('ai-agent')
     .description('AI CLI Agent for managing client projects')
     .version('1.0.0');
 
@@ -75,6 +75,25 @@ if (process.argv.length <= 2) {
     .description('Call a tool, MCP tool, or another agent')
     .option('--payload <json>', 'JSON payload for the call')
     .action(call);
+
+  program
+    .command('whatsapp')
+    .description('Send a WhatsApp message or media')
+    .requiredOption('--to <number>', 'Recipient phone number (with country code recommended)')
+    .option('--message <text>', 'Text message (also used as caption when --media is provided)')
+    .option('--media <path>', 'Local path or URL to media')
+    .option('--caption <text>', 'Caption for media (overrides --message for media caption)')
+    .option('--type <type>', 'Media type: auto, image, video, audio, document', 'auto')
+    .action(whatsapp);
+
+  program
+    .command('email')
+    .description('Send an email via configured SMTP settings')
+    .requiredOption('--to <email>', 'Recipient email address')
+    .requiredOption('--subject <text>', 'Email subject')
+    .requiredOption('--body <text>', 'Email body')
+    .option('--attach <path...>', 'Attachment file path(s)')
+    .action(email);
 
   const integration = program.command('integration').description('Manage integrations');
 
