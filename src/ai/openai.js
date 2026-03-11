@@ -91,11 +91,11 @@ export class OpenAIProvider {
 
       } else {
         const response = await this.client.chat.completions.create(options);
-        const choice = response.choices[0];
+        const choice = response.choices?.[0] || {};
         
         return {
-            content: choice.message.content,
-            toolCalls: choice.message.tool_calls
+            content: choice.message?.content || null,
+            toolCalls: choice.message?.tool_calls || null
         };
       }
     } catch (error) {
