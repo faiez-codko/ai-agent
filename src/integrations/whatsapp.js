@@ -12,6 +12,44 @@ import { generateAudio } from '../tools/audio.js';
 import { saveChatHistory } from '../chatStorage.js';
 
 const AUTH_DIR = path.join(os.homedir(), '.auth_info_baileys');
+const WHATSAPP_CHAT_STATE_FILE = path.join(process.cwd(), '.agent', 'whatsapp_chat_state.json');
+
+function loadWhatsAppChatState() {
+    try {
+        if (!fs.existsSync(WHATSAPP_CHAT_STATE_FILE)) {
+            return {};
+        }
+        return JSON.parse(fs.readFileSync(WHATSAPP_CHAT_STATE_FILE, 'utf8'));
+    } catch (error) {
+        console.error('Failed to load WhatsApp chat state:', error);
+        return {};
+    }
+}
+
+function saveWhatsAppChatState(state) {
+    try {
+        const dir = path.dirname(WHATSAPP_CHAT_STATE_FILE);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(WHATSAPP_CHAT_STATE_FILE, JSON.stringify(state, null, 2));
+    } catch (error) {
+        console.error('Failed to save WhatsApp chat state:', error);
+    }
+}
+
+function isChatAiDisabled(chatState, remoteJid) {
+    return Boolean(chatState?.[remoteJid]?.disabled);
+}
+
+function setChatAiDisabled(chatState, remoteJid, disabled) {
+    chatState[remoteJid] = {
+        ...(chatState[remoteJid] || {}),
+        disabled,
+        updatedAt: new Date().toISOString()
+    };
+    saveWhatsAppChatState(chatState);
+}
 
 async function getOrCreateWhatsAppAgent({ manager, agentId, context }) {
     let agent = manager.agents.get(agentId);
@@ -19,7 +57,7 @@ async function getOrCreateWhatsAppAgent({ manager, agentId, context }) {
         agent = await manager.createAgent('default', agentId);
     }
 
-    const agentDir = path.join(process.cwd(), '.agent', agentId);
+    const agentDir = path.join(process.cwd(), '.agent' , 'whatsapp_sessions', agentId);
     if (!fs.existsSync(agentDir)) {
         fs.mkdirSync(agentDir, { recursive: true });
     }
@@ -192,6 +230,7 @@ POLL HANDLING:
     }
 
     const commandHandler = new IntegrationCommandHandler(manager);
+    const chatState = loadWhatsAppChatState();
     
     // Keep track of messages sent by the bot to avoid loops
     const sentMsgIds = new Set();
@@ -216,6 +255,7 @@ POLL HANDLING:
             const remoteJid = key.remoteJid || trackedPoll.jid;
             if (!remoteJid) continue;
             if (remoteJid.endsWith('@g.us') && !groupsEnabled) continue;
+            if (isChatAiDisabled(chatState, remoteJid)) continue;
 
             try {
                 for (const pollUpdate of update.pollUpdates) {
@@ -380,6 +420,26 @@ Current tally: ${tally}`;
         if (text.startsWith('/')) {
             console.log(chalk.gray(`Command from ${remoteJid}: ${text}`));
             try {
+                const normalizedCommand = text.trim().toLowerCase();
+                if (normalizedCommand === '/disable') {
+                    setChatAiDisabled(chatState, remoteJid, true);
+                    const sent = await sock.sendMessage(remoteJid, {
+                        text: 'AI replies disabled for this chat. Send /enable to turn them back on.'
+                    });
+                    if (sent?.key?.id) sentMsgIds.add(sent.key.id);
+                    return;
+                }
+                if (normalizedCommand === '/enable') {
+                    setChatAiDisabled(chatState, remoteJid, false);
+                    const sent = await sock.sendMessage(remoteJid, {
+                        text: customTrigger === 'none'
+                            ? 'AI replies enabled for this chat.'
+                            : `AI replies enabled for this chat. Use ${customTrigger} to trigger me again.`
+                    });
+                    if (sent?.key?.id) sentMsgIds.add(sent.key.id);
+                    return;
+                }
+
                 const safeJid = remoteJid.replace(/[^a-zA-Z0-9]/g, '_');
                 const agentId = `wa_${safeJid}`;
                 const agent = await getOrCreateWhatsAppAgent({ manager, agentId, context });
@@ -394,6 +454,11 @@ Current tally: ${tally}`;
                 if (sent?.key?.id) sentMsgIds.add(sent.key.id);
                 return;
             }
+        }
+
+        if (isChatAiDisabled(chatState, remoteJid)) {
+            console.log(chalk.gray(`AI replies disabled for chat: ${remoteJid}`));
+            return;
         }
 
         // 2. Trigger Check: 
