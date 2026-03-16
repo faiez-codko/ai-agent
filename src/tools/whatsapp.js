@@ -1,4 +1,4 @@
-import { sendWhatsAppMessage, sendWhatsAppMedia } from '../integrations/whatsapp_client.js';
+import { sendWhatsAppMessage, sendWhatsAppMedia, sendWhatsAppPoll } from '../integrations/whatsapp_client.js';
 
 export const whatsappToolDefinitions = [
   {
@@ -45,6 +45,39 @@ export const whatsappToolDefinitions = [
       },
       required: ["to", "mediaPath"]
     }
+  },
+  {
+    name: "whatsapp_send_poll",
+    description: "Send a WhatsApp poll to a chat. ONLY use this if the user explicitly asks to send or create a poll on WhatsApp.",
+    parameters: {
+      type: "object",
+      properties: {
+        to: {
+          type: "string",
+          description: "The phone number or WhatsApp JID to send the poll to."
+        },
+        question: {
+          type: "string",
+          description: "The poll question shown in WhatsApp."
+        },
+        options: {
+          type: "array",
+          description: "A list of poll options. At least 2 are required.",
+          items: {
+            type: "string"
+          }
+        },
+        selectableCount: {
+          type: "integer",
+          description: "How many options a user can select. Defaults to 1."
+        },
+        toAnnouncementGroup: {
+          type: "boolean",
+          description: "Whether the poll is intended for an announcement group. Defaults to false."
+        }
+      },
+      required: ["to", "question", "options"]
+    }
   }
 ];
 
@@ -62,6 +95,13 @@ export const whatsappTools = {
       return await sendWhatsAppMedia(to, mediaPath, caption, mediaType);
     } catch (error) {
       return `Error sending WhatsApp media: ${error.message}`;
+    }
+  },
+  whatsapp_send_poll: async ({ to, question, options, selectableCount, toAnnouncementGroup }) => {
+    try {
+      return await sendWhatsAppPoll(to, question, options, selectableCount, toAnnouncementGroup);
+    } catch (error) {
+      return `Error sending WhatsApp poll: ${error.message}`;
     }
   }
 };

@@ -6,6 +6,32 @@ import os from 'os';
 let activeSocket = null;
 let isConnected = false;
 let connectPromise = null;
+const trackedPolls = new Map();
+
+function normalizeWhatsAppJid(jid) {
+    if (!jid.includes('@')) {
+        return jid + '@s.whatsapp.net';
+    }
+    return jid;
+}
+
+function rememberTrackedPoll(sentMessage, metadata) {
+    const messageId = sentMessage?.key?.id;
+    if (!messageId || !sentMessage?.message) return;
+
+    trackedPolls.set(messageId, {
+        key: sentMessage.key,
+        message: sentMessage.message,
+        pollUpdates: [],
+        createdAt: Date.now(),
+        ...metadata
+    });
+
+    if (trackedPolls.size > 200) {
+        const oldestId = trackedPolls.keys().next().value;
+        trackedPolls.delete(oldestId);
+    }
+}
 
 export function setActiveSocket(sock) {
     activeSocket = sock;
@@ -20,6 +46,10 @@ export function setActiveSocket(sock) {
 
 export function getActiveSocket() {
     return activeSocket;
+}
+
+export function getTrackedWhatsAppPoll(messageId) {
+    return trackedPolls.get(messageId) || null;
 }
 
 async function ensureWhatsAppConnected() {
@@ -88,10 +118,7 @@ async function ensureWhatsAppConnected() {
 
 export async function sendWhatsAppMessage(jid, text) {
     const sock = await ensureWhatsAppConnected();
-    // Simple validation for JID (if it's just a number, append suffix)
-    if (!jid.includes('@')) {
-        jid = jid + '@s.whatsapp.net';
-    }
+    jid = normalizeWhatsAppJid(jid);
     
     await sock.sendMessage(jid, { text });
     return `Message sent to ${jid}`;
@@ -99,9 +126,7 @@ export async function sendWhatsAppMessage(jid, text) {
 
 export async function sendWhatsAppMedia(jid, mediaPath, caption = '', mediaType = 'auto') {
     const sock = await ensureWhatsAppConnected();
-    if (!jid.includes('@')) {
-        jid = jid + '@s.whatsapp.net';
-    }
+    jid = normalizeWhatsAppJid(jid);
 
     // Determine media type + mimetype
     const ext = path.extname(mediaPath).toLowerCase();
@@ -156,4 +181,39 @@ export async function sendWhatsAppMedia(jid, mediaPath, caption = '', mediaType 
 
     await sock.sendMessage(jid, payload);
     return `Media (${mediaType}) sent to ${jid}`;
+}
+
+export async function sendWhatsAppPoll(jid, name, options, selectableCount = 1, toAnnouncementGroup = false) {
+    const sock = await ensureWhatsAppConnected();
+    jid = normalizeWhatsAppJid(jid);
+
+    const values = Array.isArray(options)
+        ? options.map(option => String(option).trim()).filter(Boolean)
+        : [];
+
+    if (values.length < 2) {
+        throw new Error('WhatsApp polls require at least 2 options.');
+    }
+
+    if (!Number.isInteger(selectableCount) || selectableCount < 1 || selectableCount > values.length) {
+        throw new Error(`selectableCount must be an integer between 1 and ${values.length}.`);
+    }
+
+    const sentMessage = await sock.sendMessage(jid, {
+        poll: {
+            name,
+            values,
+            selectableCount,
+            toAnnouncementGroup
+        }
+    });
+
+    rememberTrackedPoll(sentMessage, {
+        jid,
+        name,
+        values,
+        selectableCount
+    });
+
+    return `Poll sent to ${jid}: ${name}`;
 }

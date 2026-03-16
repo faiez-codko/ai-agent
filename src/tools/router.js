@@ -4,7 +4,8 @@ const aliasMap = {
     sendemail: 'send_email',
     listemails: 'list_emails',
     sendwhatsappmessage: 'whatsapp_send_message',
-    sendwhatsappmedia: 'whatsapp_send_media'
+    sendwhatsappmedia: 'whatsapp_send_media',
+    sendwhatsapppoll: 'whatsapp_send_poll'
 };
 
 const normalizeToolName = (name) => {

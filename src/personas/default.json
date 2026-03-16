@@ -49,6 +49,7 @@
                          "list_emails",
                          "whatsapp_send_message",
                          "whatsapp_send_media",
+                         "whatsapp_send_poll",
                          "mcp_list_tools",
                          "mcp_call_tool",
                          "memory_save",

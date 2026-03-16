@@ -79,7 +79,7 @@ export class Agent {
         }
 
         // Use a unique sub-directory for this agent's planning files if id is provided
-        const agentDir = this.id !== 'default' ? `.agent/${this.id}` : '.agent';
+        const agentDir = this.id !== 'default' ? `.agent/agent/${this.id}` : '.agent';
         const taskPlanPath = `${agentDir}/task_plan.md`;
         const notesPath = `${agentDir}/notes.md`;
 

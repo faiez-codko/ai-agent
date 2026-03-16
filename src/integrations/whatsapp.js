@@ -1,4 +1,4 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, jidNormalizedUser, downloadMediaMessage, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, jidNormalizedUser, downloadMediaMessage, fetchLatestBaileysVersion, getAggregateVotesInPollMessage, updateMessageWithPollUpdate } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
 import path from 'path';
 import fs from 'fs';
@@ -6,7 +6,7 @@ import os from 'os';
 import chalk from 'chalk';
 import { AgentManager } from '../agentManager.js';
 import { IntegrationCommandHandler } from './commandHandler.js';
-import { setActiveSocket, sendWhatsAppMedia } from './whatsapp_client.js';
+import { setActiveSocket, sendWhatsAppMedia, getTrackedWhatsAppPoll } from './whatsapp_client.js';
 import { loadConfig } from '../config.js';
 import { generateAudio } from '../tools/audio.js';
 import { saveChatHistory } from '../chatStorage.js';
@@ -37,11 +37,13 @@ async function getOrCreateWhatsAppAgent({ manager, agentId, context }) {
     agent.sandboxDir = sandboxDir;
     agent.safeMode = true;
 
+    const contextWithSandboxPath = `${context}\n\nSANDBOX PATH:\n- Absolute sandbox path: ${sandboxDir}\n- Use this exact directory as your working directory for all files and commands.`;
+
     const systemMsg = agent.memory.find(m => m.role === 'system');
     if (systemMsg && !systemMsg.content.includes('STRICT EXECUTION RULES')) {
-        systemMsg.content += `\n\n${context}`;
+        systemMsg.content += `\n\n${contextWithSandboxPath}`;
     } else if (!systemMsg) {
-        agent.memory.unshift({ role: 'system', content: `You are ${agent.name}.\n\n${context}` });
+        agent.memory.unshift({ role: 'system', content: `You are ${agent.name}.\n\n${contextWithSandboxPath}` });
     }
 
     return agent;
@@ -81,6 +83,20 @@ function getQuotedContext(msg) {
     const text = `${label}${qt ? ` ${qt}` : label ? '' : ''}`.trim();
     const sender = ctx.participant || '';
     return { text, sender };
+}
+
+function getPollUpdateVoterJid(pollUpdate, meId) {
+    const key = pollUpdate?.pollUpdateMessageKey;
+    const rawJid = key?.participant || (key?.fromMe ? meId : key?.remoteJid) || '';
+    return rawJid ? jidNormalizedUser(rawJid) : '';
+}
+
+function formatPollVoteSummary(aggregateVotes, voterJid) {
+    const selected = aggregateVotes
+        .filter(option => option.voters.some(voter => jidNormalizedUser(voter) === voterJid))
+        .map(option => option.name);
+
+    return selected.length ? selected.join(', ') : '(cleared vote)';
 }
 
 export async function setupWhatsApp() {
@@ -149,17 +165,23 @@ You are communicating via WhatsApp. Keep responses concise and avoid complex mar
     context += `
 
 STRICT EXECUTION RULES:
-1. When you need to execute code/scripts, you MUST save them to the script directory using \`write_file\`.
-2. Execute the script using \`run_command\`.
-3. Read the output.
-4. IMMEDIATELY delete the script file using \`delete_file\` after execution.
-5. Do not leave any files in the script directory.
+1. Your working directory is the agent sandbox directory, and you must keep all file writes and command execution inside that sandbox.
+2. When you need to execute code/scripts, you MUST save them to the script directory using \`write_file\`.
+3. Execute the script using \`run_command\`, and only run commands against files inside the sandbox directory.
+4. Read the output.
+5. IMMEDIATELY delete the script file using \`delete_file\` after execution.
+6. Do not leave any files in the script directory.
 
 MEDIA HANDLING:
 - You have access to the 'whatsapp_send_media' tool.
 - Use it when the user asks for an image, video, audio, or document.
 - You MUST provide the 'to' parameter (the user's JID) and the 'mediaPath'.
-- The user's JID will be provided in the message context.`;
+- The user's JID will be provided in the message context.
+
+POLL HANDLING:
+- You have access to the 'whatsapp_send_poll' tool.
+- Use it when the user asks you to create or send a WhatsApp poll.
+- Poll responses from users will be delivered back to you as chat context automatically.`;
 
     const manager = new AgentManager();
     await manager.init();
@@ -183,6 +205,70 @@ MEDIA HANDLING:
 
     console.log(chalk.blue('Agent initialized and listening for WhatsApp messages...'));
     console.log(chalk.gray(`My JID: ${meId}`));
+
+    sock.ev.on('messages.update', async (updates) => {
+        for (const { key, update } of updates) {
+            if (!update?.pollUpdates?.length || !key?.id) continue;
+
+            const trackedPoll = getTrackedWhatsAppPoll(key.id);
+            if (!trackedPoll?.message) continue;
+
+            const remoteJid = key.remoteJid || trackedPoll.jid;
+            if (!remoteJid) continue;
+            if (remoteJid.endsWith('@g.us') && !groupsEnabled) continue;
+
+            try {
+                for (const pollUpdate of update.pollUpdates) {
+                    updateMessageWithPollUpdate(trackedPoll, pollUpdate);
+                }
+
+                const aggregateVotes = getAggregateVotesInPollMessage({
+                    message: trackedPoll.message,
+                    pollUpdates: trackedPoll.pollUpdates
+                }, meId);
+
+                const tally = aggregateVotes.length
+                    ? aggregateVotes.map(option => `${option.name}: ${option.voters.length}`).join(', ')
+                    : 'No votes yet';
+
+                const voteLines = update.pollUpdates.map(pollUpdate => {
+                    const voterJid = getPollUpdateVoterJid(pollUpdate, meId) || 'unknown';
+                    const selected = formatPollVoteSummary(aggregateVotes, voterJid);
+                    return `- ${voterJid} selected ${selected}`;
+                });
+
+                if (!voteLines.length) continue;
+
+                console.log(chalk.gray(`Poll response received in ${remoteJid}: ${trackedPoll.name}`));
+
+                const safeJid = remoteJid.replace(/[^a-zA-Z0-9]/g, '_');
+                const agentId = `wa_${safeJid}`;
+                const agent = await getOrCreateWhatsAppAgent({ manager, agentId, context });
+
+                const prompt = `[User Context: User JID: ${remoteJid}]
+[WhatsApp Poll Response]
+Poll question: ${trackedPoll.name}
+Latest votes:
+${voteLines.join('\n')}
+Current tally: ${tally}`;
+
+                await sock.sendPresenceUpdate('composing', remoteJid);
+                const response = await agent.chat(prompt);
+                await sock.sendPresenceUpdate('paused', remoteJid);
+
+                const sentMsg = await sock.sendMessage(remoteJid, { text: response });
+                if (sentMsg?.key?.id) {
+                    sentMsgIds.add(sentMsg.key.id);
+                    if (sentMsgIds.size > 1000) {
+                        const first = sentMsgIds.values().next().value;
+                        sentMsgIds.delete(first);
+                    }
+                }
+            } catch (error) {
+                console.error('Error processing WhatsApp poll update:', error);
+            }
+        }
+    });
 
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
@@ -326,13 +412,13 @@ MEDIA HANDLING:
         let isTriggered = false;
 
         if (customTrigger === 'none') {
-            // Even when trigger is 'none', avoid accidental triggers on templates/numbers unless replying to the bot or self chat
+            // When trigger checks are disabled, replies to the bot and self-chat can still activate the agent.
             isTriggered = (isReplyToMe || isSelfChat) && !(looksLikeTemplate || looksLikeJustNumbers);
         } else {
-            // Require explicit trigger mention OR replying to the bot OR self chat
-            isTriggered = hasExplicitTrigger || isReplyToMe || isSelfChat;
-            // Guard against accidental triggers on numbers/templates without explicit trigger
-            if (!hasExplicitTrigger && (looksLikeTemplate || looksLikeJustNumbers) && !isReplyToMe && !isSelfChat) {
+            // Replies should not bypass the configured trigger; only explicit trigger mentions or self-chat activate the agent.
+            isTriggered = hasExplicitTrigger || isSelfChat;
+            // Guard against accidental triggers on numbers/templates without explicit trigger.
+            if (!hasExplicitTrigger && (looksLikeTemplate || looksLikeJustNumbers) && !isSelfChat) {
                 isTriggered = false;
             }
         }
