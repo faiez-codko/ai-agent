@@ -339,7 +339,9 @@ Current tally: ${tally}`;
              console.log(chalk.gray(`(Direct Message detected)`));
         }
         console.log(chalk.cyan('-----------------------------------'));
-        console.log(JSON.stringify(msg, null, 4));
+        console.log(msg?.pushName);
+        console.log(chalk.cyan('-----------------------------------'));
+
 
         // Group Enable/Disable Check
         if (remoteJid.endsWith('@g.us') && !groupsEnabled) {
